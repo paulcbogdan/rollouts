@@ -69,8 +69,11 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-
-*.txt
+# Development scripts and debugging files
+dev_scripts/
+run_tests.py
+run_pytest.py
+install_dev.py
 
 # Cache directories
 response_cache/
@@ -84,3 +87,5 @@ response_cache_*/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+htmlcov/
