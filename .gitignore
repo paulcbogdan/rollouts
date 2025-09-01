@@ -76,8 +76,7 @@ run_pytest.py
 install_dev.py
 
 # Cache directories
-response_cache/
-response_cache_*/
+.rollouts/
 .cache/
 
 # Jupyter Notebooks

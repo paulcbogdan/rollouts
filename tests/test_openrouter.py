@@ -8,7 +8,6 @@ from unittest.mock import Mock, AsyncMock, patch
 import pytest
 
 from rollouts.openrouter import OpenRouter
-from rollouts import Config
 
 
 class TestOpenRouterInit:

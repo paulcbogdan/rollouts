@@ -7,7 +7,7 @@ import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import pytest
 
-from rollouts import RolloutsClient, Config, Response, Usage, Rollouts
+from rollouts import RolloutsClient, Response, Usage, Rollouts
 from rollouts.cache import ResponseCache
 
 

@@ -9,33 +9,68 @@ from typing import Optional, Dict, Any
 import httpx
 
 from .datatypes import Response, Usage
-from .config import Config
+from .types import GenerationConfig, APIResponse
 
 
 class OpenRouter:
-    """OpenRouter API provider."""
+    """OpenRouter API provider for LLM generation.
+
+    This class handles direct communication with the OpenRouter API,
+    including request formatting, error handling, and response parsing.
+
+    Attributes:
+        api_key: The OpenRouter API key
+        api_url: The OpenRouter API endpoint URL
+    """
 
     def __init__(self, api_key: Optional[str] = None):
+        """Initialize the OpenRouter provider.
+
+        Args:
+            api_key: OpenRouter API key. If not provided, uses OPENROUTER_API_KEY
+                environment variable.
+
+        Raises:
+            ValueError: If no API key is provided or found in environment.
+        """
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
-            raise ValueError("OpenRouter API key not found. Set OPENROUTER_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError(
+                "OpenRouter API key not found. Set OPENROUTER_API_KEY environment variable or pass api_key parameter."
+            )
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
 
     async def generate_single(
         self,
         prompt: str,
-        config: Config,
+        config: GenerationConfig,
         seed: Optional[int] = None,
         api_key: Optional[str] = None,
         rate_limiter=None,
     ) -> Response:
-        """Generate a single response."""
+        """Generate a single response from the OpenRouter API.
+
+        Args:
+            prompt: The input prompt to send to the model
+            config: Configuration dictionary containing model parameters
+                (model, temperature, max_tokens, etc.)
+            seed: Optional random seed for reproducible generation
+            api_key: Optional API key to override instance key
+            rate_limiter: Optional rate limiter to control request frequency
+
+        Returns:
+            Response object containing the generated text and metadata
+
+        Note:
+            This method includes automatic retry logic with exponential backoff
+            for handling transient errors and rate limits.
+        """
         # Use provided API key, fallback to instance key, then error if none
         key = api_key or self.api_key
         if not key:
             return self._error_response(
                 "No API key provided. Pass api_key parameter or set OPENROUTER_API_KEY",
-                config['model'],
+                config["model"],
             )
 
         headers = {
@@ -48,14 +83,21 @@ class OpenRouter:
         # Format messages with model-specific thinking support
         from .think_handler import format_messages_with_thinking, debug_messages
 
-        messages = format_messages_with_thinking(prompt, config['model'], config['verbose'])
+        messages = format_messages_with_thinking(prompt, config["model"], config["verbose"])
 
         # Show formatted messages if verbose
-        if config['verbose']:
+        if config["verbose"]:
             debug_messages(messages, verbose=True)
 
         # Get all API parameters from config (excluding client-only settings)
-        client_only = ['max_retries', 'timeout', 'verbose', 'use_cache', 'cache_dir', 'requests_per_minute']
+        client_only = [
+            "max_retries",
+            "timeout",
+            "verbose",
+            "use_cache",
+            "cache_dir",
+            "requests_per_minute",
+        ]
         payload = {k: v for k, v in config.items() if k not in client_only and v is not None}
 
         # Add messages (required)
@@ -67,17 +109,17 @@ class OpenRouter:
 
         # Retry logic
         retry_delay = 2
-        for attempt in range(config['max_retries']):
+        for attempt in range(config["max_retries"]):
             try:
                 # Apply rate limiting if configured
                 if rate_limiter:
                     await rate_limiter.acquire()
 
-                async with httpx.AsyncClient(timeout=config['timeout']) as client:
+                async with httpx.AsyncClient(timeout=config["timeout"]) as client:
                     response = await client.post(self.api_url, headers=headers, json=payload)
 
                     if response.status_code in [500, 429]:
-                        if config['verbose']:
+                        if config["verbose"]:
                             error_type = (
                                 "Server error" if response.status_code == 500 else "Rate limit"
                             )
@@ -88,31 +130,44 @@ class OpenRouter:
                         continue
 
                     elif response.status_code != 200:
-                        if attempt == config['max_retries'] - 1:
+                        if attempt == config["max_retries"] - 1:
                             return self._error_response(
-                                f"API error: {response.status_code}", config['model']
+                                f"API error: {response.status_code}", config["model"]
                             )
                         delay = min(retry_delay * (2**attempt), 60)
                         await asyncio.sleep(delay)
                         continue
 
                     result = response.json()
-                    return self._parse_response(result, config['model'], seed)
+                    return self._parse_response(result, config["model"], seed)
 
             except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
-                if config['verbose']:
+                if config["verbose"]:
                     print(f"Request error on attempt {attempt+1}: {e}")
 
-                if attempt == config['max_retries'] - 1:
-                    return self._error_response(str(e), config['model'])
+                if attempt == config["max_retries"] - 1:
+                    return self._error_response(str(e), config["model"])
 
                 delay = min(retry_delay * (2**attempt), 60)
                 await asyncio.sleep(delay)
 
-        return self._error_response("Max retries exceeded", config['model'])
+        return self._error_response("Max retries exceeded", config["model"])
 
     def _parse_response(self, result: Dict[str, Any], model: str, seed: Optional[int]) -> Response:
-        """Parse API response into Response object."""
+        """Parse API response into Response object.
+
+        Args:
+            result: Raw JSON response from OpenRouter API
+            model: Model identifier used for the request
+            seed: Random seed used for generation (if any)
+
+        Returns:
+            Response object with parsed content, reasoning, and metadata
+
+        Note:
+            Handles both reasoning and non-reasoning model responses,
+            properly splitting content and reasoning text when present.
+        """
         if "choices" not in result or len(result["choices"]) == 0:
             return self._error_response("No choices in response", model)
 
@@ -159,7 +214,18 @@ class OpenRouter:
         )
 
     def _error_response(self, error_msg: str, model: str) -> Response:
-        """Create an error response."""
+        """Create an error response object.
+
+        Args:
+            error_msg: Error message describing what went wrong
+            model: Model identifier that was requested
+
+        Returns:
+            Response object with finish_reason="error" and error message in full field
+
+        Note:
+            Error responses are not cached and will be regenerated on retry.
+        """
         return Response(
             full=f"Error: {error_msg}",
             content="",

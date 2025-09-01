@@ -23,8 +23,8 @@ class TestBasicIntegration:
             use_cache=False  # Disable cache for simpler testing
         )
         
-        assert client.config.model == "test-model"
-        assert client.config.temperature == 0.7
+        assert client.model == "test-model"
+        assert client.temperature == 0.7
         assert client.cache is None  # use_cache=False
         assert client.rate_limiter is None  # default
         
@@ -37,7 +37,7 @@ class TestBasicIntegration:
             top_p=0.9,
             max_tokens=500
         )
-        assert client.config.temperature == 1.0
+        assert client.temperature == 1.0
         
         # Invalid config should fail
         with pytest.raises(ValueError):

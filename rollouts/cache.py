@@ -12,9 +12,31 @@ from .datatypes import Response, Usage
 
 
 class ResponseCache:
-    """Manages cached LLM responses."""
+    """Manages cached LLM responses with filesystem-based storage.
 
-    def __init__(self, cache_dir: str = "response_cache"):
+    The cache uses a hierarchical directory structure to efficiently store
+    and retrieve responses based on model, parameters, and prompt.
+
+    Cache structure:
+        cache_dir/
+        └── model-name/
+            └── parameter-hash/
+                └── prompt-hash-prefix/
+                    └── prompt-hash/
+                        └── seed_00000.json
+
+    This structure allows for:
+    - Easy cleanup of specific models or parameter combinations
+    - Efficient filesystem navigation
+    - Avoiding filesystem limitations on files per directory
+    """
+
+    def __init__(self, cache_dir: str = ".rollouts"):
+        """Initialize the response cache.
+
+        Args:
+            cache_dir: Base directory for storing cached responses
+        """
         self.cache_dir = cache_dir
 
     def _get_cache_path(
@@ -30,7 +52,27 @@ class ResponseCache:
         presence_penalty: Optional[float] = None,
         frequency_penalty: Optional[float] = None,
     ) -> str:
-        """Generate cache file path."""
+        """Generate cache file path for a specific request.
+
+        Args:
+            prompt: The input prompt (hashed for privacy)
+            model: Model identifier (cleaned for filesystem compatibility)
+            provider: Provider routing preferences (affects cache key)
+            temperature: Sampling temperature
+            top_p: Nucleus sampling parameter
+            max_tokens: Maximum tokens to generate
+            seed: Random seed for generation
+            top_k: Top-k sampling parameter
+            presence_penalty: Presence penalty
+            frequency_penalty: Frequency penalty
+
+        Returns:
+            Full path to the cache file for this specific request
+
+        Note:
+            The prompt is SHA256 hashed to ensure privacy and avoid
+            filesystem issues with special characters.
+        """
         # Clean model name for filesystem
         model_str = model.replace("/", "-").replace(":", "").replace("@", "-at-")
 

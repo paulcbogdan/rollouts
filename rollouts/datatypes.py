@@ -8,7 +8,13 @@ from typing import List, Optional, Dict, Any
 
 @dataclass
 class Usage:
-    """Token usage statistics."""
+    """Token usage statistics for a single API response.
+    
+    Attributes:
+        prompt_tokens: Number of tokens in the input prompt
+        completion_tokens: Number of tokens generated in the response
+        total_tokens: Sum of prompt_tokens and completion_tokens
+    """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -21,7 +27,24 @@ class Usage:
 
 @dataclass
 class Response:
-    """Single response from an LLM."""
+    """Single response from an LLM.
+    
+    Attributes:
+        full: Complete response text (reasoning + content if applicable)
+        content: Post-reasoning text (after </think>) or full text if no reasoning
+        reasoning: Thinking/reasoning text (before </think>) if model supports it
+        finish_reason: Why generation stopped ("stop", "length", "error", etc.)
+        provider: Which provider served the request (e.g., "openai", "anthropic")
+        response_id: Unique identifier for this response
+        model: Actual model used (may differ from requested if fallback occurred)
+        object: API response type (typically "chat.completion")
+        created: Unix timestamp when response was created
+        usage: Token usage statistics for this response
+        logprobs: Log probabilities (currently not supported, always None)
+        echo: Whether prompt was echoed in response (not supported by OpenRouter)
+        seed: Random seed used for generation (if specified)
+        completed_reasoning: Whether reasoning was completed with </think> tag
+    """
 
     full: str
     content: str = ""

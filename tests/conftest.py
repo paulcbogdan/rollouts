@@ -17,7 +17,7 @@ import json
 # Add parent directory to path for imports if running tests without installation
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rollouts import Config, Response, Usage, Rollouts
+from rollouts import Response, Usage, Rollouts
 
 
 @pytest.fixture
@@ -33,19 +33,6 @@ def temp_cache_dir():
 def mock_api_key():
     """Mock API key for testing."""
     return "test-api-key-12345"
-
-
-@pytest.fixture
-def sample_config():
-    """Create a sample configuration for testing."""
-    return Config(
-        model="qwen/qwen3-30b-a3b",
-        temperature=0.7,
-        top_p=0.95,
-        max_tokens=100,
-        verbose=False,
-        use_cache=False
-    )
 
 
 @pytest.fixture

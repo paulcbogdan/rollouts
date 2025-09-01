@@ -113,6 +113,12 @@ rollouts1 = client.generate("What is 2+2?", n_samples=3)
 rollouts2 = client.generate("What is 2+2?", n_samples=3)
 ```
 
+**Cache Behavior:**
+- Responses are cached in a hierarchical directory structure: `cache_dir/model/parameters/prompt_hash_prefix/prompt_hash/seed_00000.json`
+- Each unique combination of prompt, model, and parameters gets its own cache location
+- If a cached response has `finish_reason="error"`, it will be regenerated on the next request
+- To clear the cache, simply delete the cache directory or specific subdirectories/files
+
 ## API Reference
 
 ### RolloutsClient
@@ -121,15 +127,23 @@ Main client class for generating responses.
 
 **Parameters:**
 - `model` (str, required): Model identifier
-- `temperature` (float): Sampling temperature (0.0-2.0)
-- `top_p` (float): Nucleus sampling parameter
-- `max_tokens` (int): Maximum tokens to generate
-- `top_k` (int): Top-k sampling parameter
-- `presence_penalty` (float): Presence penalty (-2.0 to 2.0)
-- `frequency_penalty` (float): Frequency penalty (-2.0 to 2.0)
-- `api_key` (str): API key (uses env variable if None)
-- `use_cache` (bool): Enable caching
-- `verbose` (bool): Print debug information
+- `temperature` (float): Sampling temperature (0.0-2.0, default: 0.7)
+- `top_p` (float): Nucleus sampling parameter (0.0-1.0, default: 0.95)
+- `max_tokens` (int): Maximum tokens to generate (default: 4096)
+- `top_k` (int): Top-k sampling parameter (default: None)
+- `presence_penalty` (float): Presence penalty (-2.0 to 2.0, default: 0.0)
+- `frequency_penalty` (float): Frequency penalty (-2.0 to 2.0, default: 0.0)
+- `provider` (dict): Provider routing preferences (e.g., `{"order": ["anthropic", "openai"]}`)
+- `reasoning` (dict): Reasoning configuration for models that support it (e.g., `{"max_tokens": 2000}` or `{"effort": "low"}`)
+- `include_reasoning` (bool): Whether to include reasoning in response (default: None, auto-detected)
+- `api_key` (str): API key (uses OPENROUTER_API_KEY env variable if None)
+- `max_retries` (int): Maximum retry attempts for failed requests (default: 100)
+- `timeout` (int): Request timeout in seconds (default: 300)
+- `verbose` (bool): Print debug information (default: False)
+- `use_cache` (bool): Enable response caching (default: True)
+- `cache_dir` (str): Directory for cache files (default: ".rollouts")
+- `requests_per_minute` (int): Rate limit for API requests (default: None, no limit)
+- `**kwargs`: Additional OpenRouter parameters (e.g., `min_p`, `top_a`, `repetition_penalty`)
 
 ### Rollouts
 
@@ -157,6 +171,29 @@ Individual response from the model.
 - `reasoning`: The reasoning/thinking text (what comes before `</think>`)
 - `usage`: Token usage statistics
 - `finish_reason`: Why the response ended (e.g., "stop", "length")
+
+### OpenRouter
+
+Low-level API provider class for direct OpenRouter API access.
+
+**Usage:**
+```python
+from rollouts import OpenRouter
+
+# Initialize with API key
+router = OpenRouter(api_key="your-key-here")
+
+# Generate a single response (async)
+async def generate():
+    response = await router.generate_single(
+        prompt="Hello, world!",
+        config={"model": "qwen/qwen3-30b-a3b", "temperature": 0.7, "max_tokens": 100},
+        seed=42
+    )
+    print(response.full)
+```
+
+**Note:** This is a lower-level interface. Most users should use `RolloutsClient` instead, which provides caching, retry logic, and a simpler API.
 
 ## API Key Configuration
 

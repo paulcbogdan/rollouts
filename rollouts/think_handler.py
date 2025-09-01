@@ -1,14 +1,41 @@
 """
 Handle think token insertion for different model types.
-Supports both standard <think> format and GPT-OSS Harmony format.
+
+This module manages thinking/reasoning injection for various LLM models,
+allowing users to provide partial reasoning that the model will continue.
+
+Supported formats:
+- Standard <think> tags: Used by Qwen, DeepSeek, Claude, etc.
+- GPT-OSS Harmony format: Not currently supported via OpenRouter
+- Gemini thinking: Handled internally by the model, not in messages
+
+Key functionality:
+- Detect model type from model name
+- Format messages appropriately for each model type
+- Handle think injection for supported models
+- Provide warnings for unsupported features
 """
 
 import warnings
 from typing import List, Dict, Any, Tuple
 
+from .types import Message
+
 
 def detect_model_type(model: str) -> str:
-    """Detect the type of model based on model name."""
+    """Detect the type of model based on model name.
+
+    Args:
+        model: The model identifier string (e.g., "qwen/qwen3-30b-a3b")
+
+    Returns:
+        Model type string: "think", "gpt-oss", "gemini-thinking", etc.
+
+    Supported model types:
+        - "think": Models using standard <think> tags (Qwen, DeepSeek, Claude, etc.)
+        - "gpt-oss": GPT-OSS models (limited support on OpenRouter)
+        - "gemini-thinking": Gemini models with internal reasoning
+    """
     model_lower = model.lower()
 
     # GPT-OSS models use Harmony format
@@ -45,9 +72,7 @@ def detect_model_type(model: str) -> str:
     return "think"
 
 
-def format_messages_with_thinking(
-    prompt: str, model: str, verbose: bool = False
-) -> List[Dict[str, str]]:
+def format_messages_with_thinking(prompt: str, model: str, verbose: bool = False) -> List[Message]:
     """
     Format messages with thinking tokens based on model type.
 
@@ -90,13 +115,26 @@ def format_messages_with_thinking(
         return [{"role": "user", "content": prompt}]
 
 
-def format_think_messages(
-    prompt: str, has_think: bool, verbose: bool = False
-) -> List[Dict[str, str]]:
+def format_think_messages(prompt: str, has_think: bool, verbose: bool = False) -> List[Message]:
     """
     Format messages for models that use <think> tags.
 
     If the prompt contains <think>, split it so the model continues from the thinking.
+
+    Args:
+        prompt: The user's prompt, potentially containing <think> tag
+        has_think: Whether the prompt contains a <think> tag
+        verbose: Whether to print debug information
+
+    Returns:
+        List of message dictionaries formatted for the API
+
+    Example:
+        Input: "What is 2+2? <think>Let me calculate: 2"
+        Output: [
+            {"role": "user", "content": "What is 2+2?"},
+            {"role": "assistant", "content": "<think>Let me calculate: 2"}
+        ]
     """
     if not has_think:
         return [{"role": "user", "content": prompt}]
@@ -183,15 +221,12 @@ def create_test_prompts(model: str) -> List[Tuple[str, str]]:
         ]
 
 
-def debug_messages(messages: List[Dict[str, str]], verbose: bool = True):
+def debug_messages(messages: List[Message], verbose: bool = True):
     """Print formatted messages for debugging."""
     if not verbose:
         return
 
-    print("\n" + "=" * 60)
-    print("DEBUG: Formatted Messages")
-    print("=" * 60)
-
+    print("Messages:")
     for i, msg in enumerate(messages):
         print(f"\nMessage {i+1}:")
         print(f"  Role: {msg['role']}")
@@ -199,5 +234,3 @@ def debug_messages(messages: List[Dict[str, str]], verbose: bool = True):
         if len(content) > 200:
             content = content[:200] + "..."
         print(f"  Content: {content}")
-
-    print("=" * 60 + "\n")

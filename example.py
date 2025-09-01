@@ -217,6 +217,131 @@ def example_7_caching():
     print(f"Same response? {rollouts1[0].full == rollouts2[0].full=}")
 
 
+def example_8_provider_routing():
+    """Example 8: Using provider routing to select specific AI providers."""
+    print("\n" + "=" * 50)
+    print("EXAMPLE 8: Provider Routing")
+    print("=" * 50)
+
+    # Prefer specific providers or exclude others
+    client = RolloutsClient(
+        model="meta-llama/llama-3.1-8b-instruct",  # Available from multiple providers
+        provider={
+            "order": ["groq", "together", "deepinfra"],  # Prefer these providers in order
+            # You can also exclude providers:
+            # "ignore": ["openai", "anthropic"]
+        },
+        temperature=0.7,
+        max_tokens=100,
+    )
+
+    prompt = "What is Python?"
+    rollouts = client.generate(prompt, n_samples=1)
+    
+    print(f"Prompt: {prompt}")
+    print(f"Response from provider '{rollouts[0].provider}': {rollouts[0].full=}")
+    print("\nNote: Provider routing allows you to:")
+    print("- Prefer specific providers with 'order'")
+    print("- Exclude providers with 'ignore'")
+    print("- Control costs and latency by choosing optimal providers")
+
+
+def example_9_rate_limiting():
+    """Example 9: Using rate limiting to control API request speed."""
+    print("\n" + "=" * 50)
+    print("EXAMPLE 9: Rate Limiting")
+    print("=" * 50)
+
+    # Limit to 60 requests per minute (1 per second)
+    client = RolloutsClient(
+        model="qwen/qwen-2.5-7b-instruct",
+        temperature=0.7,
+        max_tokens=50,
+        requests_per_minute=60,  # Rate limit
+        verbose=True,  # Show when rate limiting occurs
+    )
+
+    prompts = [
+        "Count to 3",
+        "Name a color",
+        "Say hello",
+    ]
+
+    print("Generating 3 responses with rate limiting (60 RPM)...")
+    print("This ensures we don't exceed API rate limits")
+    
+    for i, prompt in enumerate(prompts, 1):
+        t_start = time.time()
+        rollouts = client.generate(prompt, n_samples=1)
+        t_end = time.time()
+        print(f"\n{i}. Prompt: '{prompt}' (took {t_end - t_start:.2f}s)")
+        print(f"   Response: {rollouts[0].full}")
+
+
+def example_10_advanced_parameters():
+    """Example 10: Using advanced sampling parameters."""
+    print("\n" + "=" * 50)
+    print("EXAMPLE 10: Advanced Parameters")
+    print("=" * 50)
+
+    # Use additional OpenRouter parameters for fine control
+    client = RolloutsClient(
+        model="qwen/qwen-2.5-7b-instruct",
+        temperature=0.9,
+        max_tokens=100,
+        # Advanced sampling parameters
+        repetition_penalty=1.1,  # Reduce repetition
+        min_p=0.05,  # Minimum probability threshold
+        top_a=0.8,  # Top-a sampling
+    )
+
+    prompt = "Write a short story about a robot. Be creative and avoid repetition."
+    rollouts = client.generate(prompt, n_samples=1)
+    
+    print(f"Prompt: {prompt}")
+    print(f"\nResponse with advanced parameters:")
+    print(f"{rollouts[0].full}")
+    print("\nAdvanced parameters used:")
+    print("- repetition_penalty=1.1 (reduces repetition)")
+    print("- min_p=0.05 (filters low probability tokens)")
+    print("- top_a=0.8 (alternative to top_p sampling)")
+
+
+def example_11_reasoning_config():
+    """Example 11: Configure reasoning for models that support it."""
+    print("\n" + "=" * 50)
+    print("EXAMPLE 11: Reasoning Configuration")
+    print("=" * 50)
+
+    # Configure reasoning behavior
+    client = RolloutsClient(
+        model="deepseek/deepseek-r1",  # A reasoning model
+        temperature=0.7,
+        max_tokens=500,
+        reasoning={
+            "max_tokens": 1000,  # Limit reasoning tokens
+            # Some models support "effort" parameter:
+            # "effort": "low"  # or "medium", "high"
+        },
+        include_reasoning=True,  # Explicitly include reasoning in response
+    )
+
+    prompt = "Solve: If a train travels 60 mph for 2.5 hours, how far does it go?"
+    
+    try:
+        rollouts = client.generate(prompt, n_samples=1)
+        response = rollouts[0]
+        
+        print(f"Prompt: {prompt}")
+        if response.reasoning:
+            print(f"\nReasoning process:")
+            print(f"{response.reasoning}")
+        print(f"\nFinal answer:")
+        print(f"{response.content}")
+    except Exception as e:
+        print(f"Note: This example requires a reasoning model. Error: {e}")
+
+
 def main():
     """Run all examples."""
     print("ROLLOUTS PACKAGE EXAMPLES")
@@ -231,14 +356,6 @@ def main():
 
     print(f"\n✓ API key found: {'*' * 20}{os.getenv('OPENROUTER_API_KEY')[-4:]}")
 
-    example_0_reasoning_model()
-    example_1_non_reasoning()
-    example_2_multiple_samples()
-    example_3_think_injection()
-    example_4_parameter_overrides()
-    example_6_different_models()
-    example_7_caching()
-
     # Run synchronous examples
     try:
         example_0_reasoning_model()
@@ -248,6 +365,10 @@ def main():
         example_4_parameter_overrides()
         example_6_different_models()
         example_7_caching()
+        example_8_provider_routing()
+        example_9_rate_limiting()
+        example_10_advanced_parameters()
+        example_11_reasoning_config()
 
         # Run async example
         print("\nRunning async example...")
@@ -272,6 +393,10 @@ def main():
     print("5. Use async methods for better performance")
     print("6. Different models have different strengths")
     print("7. Caching saves API costs for repeated requests")
+    print("8. Provider routing gives control over which AI provider to use")
+    print("9. Rate limiting helps avoid hitting API limits")
+    print("10. Advanced parameters provide fine control over generation")
+    print("11. Reasoning can be configured for supported models")
 
     print("\nFor more information, see README.md")
 
