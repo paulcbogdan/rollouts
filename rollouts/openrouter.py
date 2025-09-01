@@ -35,7 +35,7 @@ class OpenRouter:
         if not key:
             return self._error_response(
                 "No API key provided. Pass api_key parameter or set OPENROUTER_API_KEY",
-                config.model,
+                config['model'],
             )
 
         headers = {
@@ -48,14 +48,15 @@ class OpenRouter:
         # Format messages with model-specific thinking support
         from .think_handler import format_messages_with_thinking, debug_messages
 
-        messages = format_messages_with_thinking(prompt, config.model, config.verbose)
+        messages = format_messages_with_thinking(prompt, config['model'], config['verbose'])
 
         # Show formatted messages if verbose
-        if config.verbose:
+        if config['verbose']:
             debug_messages(messages, verbose=True)
 
-        # Get all API parameters from config
-        payload = config.to_api_params()
+        # Get all API parameters from config (excluding client-only settings)
+        client_only = ['max_retries', 'timeout', 'verbose', 'use_cache', 'cache_dir', 'requests_per_minute']
+        payload = {k: v for k, v in config.items() if k not in client_only and v is not None}
 
         # Add messages (required)
         payload["messages"] = messages
@@ -66,49 +67,49 @@ class OpenRouter:
 
         # Retry logic
         retry_delay = 2
-        for attempt in range(config.max_retries):
+        for attempt in range(config['max_retries']):
             try:
                 # Apply rate limiting if configured
                 if rate_limiter:
                     await rate_limiter.acquire()
 
-                async with httpx.AsyncClient(timeout=config.timeout) as client:
+                async with httpx.AsyncClient(timeout=config['timeout']) as client:
                     response = await client.post(self.api_url, headers=headers, json=payload)
 
                     if response.status_code in [500, 429]:
-                        if config.verbose:
+                        if config['verbose']:
                             error_type = (
                                 "Server error" if response.status_code == 500 else "Rate limit"
                             )
-                            print(f"{error_type} on attempt {attempt+1}/{config.max_retries}")
+                            print(f"{error_type} on attempt {attempt+1}/{config['max_retries']}")
 
                         delay = min(retry_delay * (2**attempt), 60)
                         await asyncio.sleep(delay)
                         continue
 
                     elif response.status_code != 200:
-                        if attempt == config.max_retries - 1:
+                        if attempt == config['max_retries'] - 1:
                             return self._error_response(
-                                f"API error: {response.status_code}", config.model
+                                f"API error: {response.status_code}", config['model']
                             )
                         delay = min(retry_delay * (2**attempt), 60)
                         await asyncio.sleep(delay)
                         continue
 
                     result = response.json()
-                    return self._parse_response(result, config.model, seed)
+                    return self._parse_response(result, config['model'], seed)
 
             except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
-                if config.verbose:
+                if config['verbose']:
                     print(f"Request error on attempt {attempt+1}: {e}")
 
-                if attempt == config.max_retries - 1:
-                    return self._error_response(str(e), config.model)
+                if attempt == config['max_retries'] - 1:
+                    return self._error_response(str(e), config['model'])
 
                 delay = min(retry_delay * (2**attempt), 60)
                 await asyncio.sleep(delay)
 
-        return self._error_response("Max retries exceeded", config.model)
+        return self._error_response("Max retries exceeded", config['model'])
 
     def _parse_response(self, result: Dict[str, Any], model: str, seed: Optional[int]) -> Response:
         """Parse API response into Response object."""

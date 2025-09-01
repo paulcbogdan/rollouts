@@ -6,7 +6,6 @@ import asyncio
 from typing import Optional, List, Dict, Any, Union
 from concurrent.futures import ThreadPoolExecutor
 
-from .config import Config
 from .datatypes import Rollouts, Response
 from .cache import ResponseCache
 from .openrouter import OpenRouter
@@ -78,29 +77,33 @@ class RolloutsClient:
             cache_dir: Directory for cache files
             requests_per_minute: Rate limit for API requests (None = no limit)
         """
-        # Create config
-        self.config = Config(
-            model=model,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            top_k=top_k,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            provider=provider,
-            reasoning=reasoning,
-            include_reasoning=include_reasoning,
-            max_retries=max_retries,
-            timeout=timeout,
-            verbose=verbose,
-            use_cache=use_cache,
-            cache_dir=cache_dir,
-            requests_per_minute=requests_per_minute,
-            **kwargs,
-        )
+        # Store parameters as attributes
+        self.model = model
+        self.temperature = temperature
+        self.top_p = top_p
+        self.max_tokens = max_tokens
+        self.top_k = top_k
+        self.presence_penalty = presence_penalty
+        self.frequency_penalty = frequency_penalty
+        self.provider_config = provider  # Store provider configuration
+        self.reasoning = reasoning
+        self.include_reasoning = include_reasoning
+        self.max_retries = max_retries
+        self.timeout = timeout
+        self.verbose = verbose
+        self.use_cache = use_cache
+        self.cache_dir = cache_dir
+        self.requests_per_minute = requests_per_minute
+        
+        # Additional parameters from kwargs
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        
+        # Validate parameters
+        self._validate_params()
 
         # Check for unsupported features
-        if self.config.top_logprobs is not None and self.config.top_logprobs > 0:
+        if getattr(self, 'top_logprobs', None) is not None and self.top_logprobs > 0:
             raise NotImplementedError(
                 "logprobs are not currently supported. OpenRouter's implementation "
                 "of logprobs appears inconsistent across providers, so this feature "
@@ -124,6 +127,41 @@ class RolloutsClient:
     def _init_provider(self, api_key: Optional[str] = None):
         """Initialize OpenRouter provider."""
         self.provider = OpenRouter(api_key)
+    
+    def _validate_params(self):
+        """Validate configuration parameters."""
+        if self.model is None:
+            raise ValueError("model parameter is required")
+        
+        if self.temperature is not None and not 0.0 <= self.temperature <= 2.0:
+            raise ValueError(f"temperature must be between 0.0 and 2.0, got {self.temperature}")
+        
+        if self.top_p is not None and not 0.0 < self.top_p <= 1.0:
+            raise ValueError(f"top_p must be between (0.0, 1.0], got {self.top_p}")
+        
+        if self.max_tokens is not None and self.max_tokens < 1:
+            raise ValueError(f"max_tokens must be positive, got {self.max_tokens}")
+        
+        if self.frequency_penalty is not None and not -2.0 <= self.frequency_penalty <= 2.0:
+            raise ValueError(f"frequency_penalty must be between -2.0 and 2.0, got {self.frequency_penalty}")
+        
+        if self.presence_penalty is not None and not -2.0 <= self.presence_penalty <= 2.0:
+            raise ValueError(f"presence_penalty must be between -2.0 and 2.0, got {self.presence_penalty}")
+        
+        repetition_penalty = getattr(self, 'repetition_penalty', None)
+        if repetition_penalty is not None and not 0.0 < repetition_penalty <= 2.0:
+            raise ValueError(f"repetition_penalty must be between (0, 2], got {repetition_penalty}")
+        
+        if self.top_k is not None and self.top_k < 1:
+            raise ValueError(f"top_k must be >= 1, got {self.top_k}")
+        
+        min_p = getattr(self, 'min_p', None)
+        if min_p is not None and not 0.0 <= min_p <= 1.0:
+            raise ValueError(f"min_p must be between [0, 1], got {min_p}")
+        
+        top_a = getattr(self, 'top_a', None)
+        if top_a is not None and not 0.0 <= top_a <= 1.0:
+            raise ValueError(f"top_a must be between [0, 1], got {top_a}")
 
     async def agenerate(
         self,
@@ -158,6 +196,9 @@ class RolloutsClient:
         """
         n_samples = n_samples or 1
 
+        if seed is not None:
+            assert n_samples == 1, "Cannot specify seed and n_samples > 1"
+
         # Extract api_key separately (don't include in config)
         api_key = kwargs.pop("api_key", None)
 
@@ -177,10 +218,35 @@ class RolloutsClient:
             if v is not None
         }
 
-        config = self.config.copy_with(**overrides) if overrides else self.config
-
+        # Create merged config from instance attributes and overrides
+        config = {}
+        
+        # Copy all instance attributes
+        for attr in ['model', 'temperature', 'top_p', 'max_tokens', 'top_k', 'presence_penalty', 
+                     'frequency_penalty', 'reasoning', 'include_reasoning', 
+                     'max_retries', 'timeout', 'verbose', 'use_cache', 'cache_dir', 'requests_per_minute']:
+            if hasattr(self, attr):
+                config[attr] = getattr(self, attr)
+        
+        # Add provider_config as 'provider' in the config dict
+        if hasattr(self, 'provider_config'):
+            config['provider'] = getattr(self, 'provider_config')
+        
+        # Add any additional kwargs that were set during init
+        # Exclude client-only objects like provider, cache, rate_limiter, _executor
+        excluded_attrs = {'provider', 'cache', 'rate_limiter', '_executor'}
+        for attr_name in dir(self):
+            if (not attr_name.startswith('_') and 
+                not callable(getattr(self, attr_name)) and 
+                attr_name not in config and 
+                attr_name not in excluded_attrs):
+                config[attr_name] = getattr(self, attr_name)
+        
+        # Apply overrides
+        config.update(overrides)
+        
         # Check for unsupported features
-        if config.top_logprobs is not None and config.top_logprobs > 0:
+        if config.get('top_logprobs') is not None and config['top_logprobs'] > 0:
             raise NotImplementedError(
                 "logprobs are not currently supported. OpenRouter's implementation "
                 "of logprobs appears inconsistent across providers, so this feature "
@@ -196,28 +262,28 @@ class RolloutsClient:
             current_seed = (seed + i) if seed is not None else i
 
             # Check cache
-            if self.cache and config.use_cache:
+            if self.cache and config['use_cache']:
                 cached = self.cache.get(
                     prompt=prompt,
-                    model=config.model,
-                    provider=config.provider,
-                    temperature=config.temperature,
-                    top_p=config.top_p,
-                    max_tokens=config.max_tokens,
+                    model=config['model'],
+                    provider=config['provider'],
+                    temperature=config['temperature'],
+                    top_p=config['top_p'],
+                    max_tokens=config['max_tokens'],
                     seed=current_seed,
-                    top_k=config.top_k,
-                    presence_penalty=config.presence_penalty,
-                    frequency_penalty=config.frequency_penalty,
+                    top_k=config['top_k'],
+                    presence_penalty=config['presence_penalty'],
+                    frequency_penalty=config['frequency_penalty'],
                 )
 
                 # Only use cached response if it's not an error
                 if cached and cached.finish_reason != "error":
-                    if config.verbose:
+                    if config['verbose']:
                         print(f"Found cached response for seed {current_seed}")
                     responses.append(cached)
                     continue
                 elif cached and cached.finish_reason == "error":
-                    if config.verbose:
+                    if config['verbose']:
                         print(f"Found cached error for seed {current_seed}, regenerating...")
 
             # Add generation task
@@ -237,22 +303,22 @@ class RolloutsClient:
             for (current_seed, _), response in zip(tasks, results):
                 if response.finish_reason != "error":
                     # Cache successful response
-                    if self.cache and config.use_cache:
+                    if self.cache and config['use_cache']:
                         self.cache.set(
                             prompt=prompt,
-                            model=config.model,
-                            provider=config.provider,
-                            temperature=config.temperature,
-                            top_p=config.top_p,
-                            max_tokens=config.max_tokens,
+                            model=config['model'],
+                            provider=config['provider'],
+                            temperature=config['temperature'],
+                            top_p=config['top_p'],
+                            max_tokens=config['max_tokens'],
                             seed=current_seed,
                             response=response,
-                            top_k=config.top_k,
-                            presence_penalty=config.presence_penalty,
-                            frequency_penalty=config.frequency_penalty,
+                            top_k=config['top_k'],
+                            presence_penalty=config['presence_penalty'],
+                            frequency_penalty=config['frequency_penalty'],
                         )
                     responses.append(response)
-                elif config.verbose:
+                elif config['verbose']:
                     print(f"Error generating response for seed {current_seed}: {response.full}")
 
         # Get cache directory
@@ -260,24 +326,24 @@ class RolloutsClient:
         if self.cache:
             cache_dir = self.cache.get_cache_dir(
                 prompt=prompt,
-                model=config.model,
-                provider=config.provider,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                max_tokens=config.max_tokens,
-                top_k=config.top_k,
-                presence_penalty=config.presence_penalty,
-                frequency_penalty=config.frequency_penalty,
+                model=config['model'],
+                provider=config['provider'],
+                temperature=config['temperature'],
+                top_p=config['top_p'],
+                max_tokens=config['max_tokens'],
+                top_k=config['top_k'],
+                presence_penalty=config['presence_penalty'],
+                frequency_penalty=config['frequency_penalty'],
             )
 
         # Create Rollouts
         return Rollouts(
             prompt=prompt,
             num_responses=n_samples,
-            temperature=config.temperature,
-            top_p=config.top_p,
-            max_tokens=config.max_tokens,
-            model=config.model,
+            temperature=config['temperature'],
+            top_p=config['top_p'],
+            max_tokens=config['max_tokens'],
+            model=config['model'],
             responses=responses,
             cache_dir=cache_dir,
             logprobs_enabled=False,  # Not supported - will error earlier if requested
@@ -317,23 +383,8 @@ class RolloutsClient:
     def __repr__(self) -> str:
         """String representation."""
         return (
-            f"RolloutsClient(model='{self.config.model}', "
-            f"temperature={self.config.temperature})"
+            f"RolloutsClient(model='{self.model}', "
+            f"temperature={self.temperature})"
         )
 
 
-def create_client(model: str, **kwargs) -> RolloutsClient:
-    """
-    Factory function to create a client.
-
-    Args:
-        model: Model identifier
-        **kwargs: Additional parameters
-
-    Returns:
-        Configured RolloutsClient
-
-    Example:
-        client = create_client("qwen/qwen3-30b-a3b", temperature=0.9)
-    """
-    return RolloutsClient(model=model, **kwargs)

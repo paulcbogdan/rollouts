@@ -7,7 +7,7 @@ import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import pytest
 
-from rollouts import RolloutsClient, create_client, Config, Response, Usage, Rollouts
+from rollouts import RolloutsClient, Config, Response, Usage, Rollouts
 from rollouts.cache import ResponseCache
 
 
@@ -18,11 +18,11 @@ class TestRolloutsClientInit:
         """Test creating client with minimal parameters."""
         client = RolloutsClient(model="test/model")
         
-        assert client.config.model == "test/model"
-        assert client.config.temperature == 0.7
-        assert client.config.top_p == 0.95
-        assert client.config.max_tokens == 4096
-        assert client.config.use_cache is True
+        assert client.model == "test/model"
+        assert client.temperature == 0.7
+        assert client.top_p == 0.95
+        assert client.max_tokens == 4096
+        assert client.use_cache is True
         
     def test_client_creation_full(self, mock_env_api_key):
         """Test creating client with all parameters."""
@@ -46,22 +46,22 @@ class TestRolloutsClientInit:
             requests_per_minute=100
         )
         
-        assert client.config.model == "test/model"
-        assert client.config.temperature == 1.2
-        assert client.config.top_p == 0.9
-        assert client.config.max_tokens == 2000
-        assert client.config.top_k == 50
-        assert client.config.presence_penalty == 0.5
-        assert client.config.frequency_penalty == 0.3
-        assert client.config.provider == {"order": ["openai"]}
-        assert client.config.reasoning == {"max_tokens": 1000}
-        assert client.config.include_reasoning is True
-        assert client.config.max_retries == 50
-        assert client.config.timeout == 600
-        assert client.config.verbose is True
-        assert client.config.use_cache is False
-        assert client.config.cache_dir == "custom_cache"
-        assert client.config.requests_per_minute == 100
+        assert client.model == "test/model"
+        assert client.temperature == 1.2
+        assert client.top_p == 0.9
+        assert client.max_tokens == 2000
+        assert client.top_k == 50
+        assert client.presence_penalty == 0.5
+        assert client.frequency_penalty == 0.3
+        assert client.provider_config == {"order": ["openai"]}
+        assert client.reasoning == {"max_tokens": 1000}
+        assert client.include_reasoning is True
+        assert client.max_retries == 50
+        assert client.timeout == 600
+        assert client.verbose is True
+        assert client.use_cache is False
+        assert client.cache_dir == "custom_cache"
+        assert client.requests_per_minute == 100
         assert client.cache is None  # use_cache=False
         assert client.rate_limiter is not None
         
@@ -183,9 +183,9 @@ class TestRolloutsClientGenerate:
             # Check that overrides were passed to provider
             call_args = mock_gen.call_args[0]
             config_used = call_args[1]
-            assert config_used.temperature == 1.5
-            assert config_used.max_tokens == 200
-            assert config_used.seed == 42
+            assert config_used['temperature'] == 1.5
+            assert config_used['max_tokens'] == 200
+            assert config_used['seed'] == 42
             
     @pytest.mark.asyncio
     async def test_agenerate_with_cache_hit(self, mock_env_api_key, temp_cache_dir):
@@ -307,26 +307,3 @@ class TestRolloutsClientGenerate:
         assert "temperature=0.9" in repr_str
 
 
-class TestCreateClient:
-    """Test create_client factory function."""
-    
-    def test_create_client(self, mock_env_api_key):
-        """Test factory function creates client."""
-        client = create_client("test/model", temperature=0.8)
-        
-        assert isinstance(client, RolloutsClient)
-        assert client.config.model == "test/model"
-        assert client.config.temperature == 0.8
-        
-    def test_create_client_with_kwargs(self, mock_env_api_key):
-        """Test factory with various kwargs."""
-        client = create_client(
-            "test",
-            temperature=1.2,
-            max_tokens=2000,
-            use_cache=False
-        )
-        
-        assert client.config.temperature == 1.2
-        assert client.config.max_tokens == 2000
-        assert client.config.use_cache is False

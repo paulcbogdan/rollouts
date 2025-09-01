@@ -1,16 +1,11 @@
 # Rollouts
 
-A high-quality Python package for generating multiple LLM responses with built-in resampling, caching, and provider abstraction.
+A Python package for conveniently interacting with the OpenRouter API. The package provides two notable features:
 
-## Features
+- The package will automatically cache responses. The first time you call `client.generate('your prompt', n_samples=2)`, two jsons will be saved with the model response to each. If you make the same call, those jsons will be loaded.
+- You can easily insert text into model's reasoning. If you call `client.generate('What is 5*10?\n<think>\n5*1')` the model response will start `"0"`. 
 
-- **Simple Interface**: Both synchronous and asynchronous APIs
-- **Multiple Providers**: Support for OpenRouter, Fireworks, Together, and more
-- **Smart Caching**: Automatic response caching to reduce API costs
-- **Parameter Override**: Override any setting at generation time
-- **Presets**: Built-in presets for common use cases
-- **Type Safety**: Full type hints and dataclass models
-- **Production Ready**: Comprehensive error handling and retries
+Examples are provided below, and additional examples are shown in `example.py`.
 
 ## Installation
 
@@ -18,19 +13,12 @@ A high-quality Python package for generating multiple LLM responses with built-i
 pip install rollouts
 ```
 
-## Examples
-
-See `example.py` for comprehensive examples of all package features:
+## Quick Start
 
 ```bash
 # Set your API key
 export OPENROUTER_API_KEY="your-key-here"
-
-# Run the examples
-python example.py
 ```
-
-## Quick Start
 
 ### Synchronous Usage
 
@@ -42,14 +30,16 @@ client = RolloutsClient(
     model="qwen/qwen3-30b-a3b",
     temperature=0.7,
     max_tokens=1000
-)
+) 
 
-# Generate multiple responses
+# Generate multiple responses (one prompt sampled concurrently). This runs on seeds from 0 to n_samples (e.g., 0, 1, 2, 3, 4)
 rollouts = client.generate("What is the meaning of life?", n_samples=5)
 
 # Access responses
 for response in rollouts:
-    print(response.full)
+    print(f"Reasoning: {response.reasoning=}") # reasoning text if reasoning model; None if non-reasoning model or if reasoning is hidden
+    print(f"Content: {response.content=}") # post-reasoning output (or just output if not a reasoning model)
+    print(f"Response: {response.full=}") # "{reasoning}</think>{content}" if reasoning exists and completed; "{reasoning}" if reasoning not completed; "{content}" if non-reasoning model or if reasoning is hidden
 ```
 
 ### Asynchronous Usage
@@ -73,52 +63,23 @@ async def main():
 asyncio.run(main())
 ```
 
-### Using Presets
+### Thinking Injection
+
+For models using <think> tags, you can insert thoughts and continue the chain-of-thought from there (this works for Deepseek, Qwen, QwQ, Anthropic, and presumably other models). 
+
+Does not work for:
+- Models where thinking is hidden (Gemini and OpenAI)
+- GPT-OSS-20b/120b, which use a different reasoning template; I tried to get GPT-OSS working, but I'm not sure it's possible with OpenRouter.
 
 ```python
-from rollouts import create_client
-
-# Create client with a preset configuration
-client = create_client(
-    model="qwen/qwen3-30b-a3b",
-    preset="creative"  # High temperature, more diverse outputs
-)
-
-responses = client.generate("Write a story", n_samples=3)
-```
-
-Available presets:
-- `deterministic`: Temperature 0, best for factual responses
-- `focused`: Low temperature (0.3), focused but not rigid
-- `balanced`: Medium temperature (0.7), good default
-- `creative`: High temperature (1.2), diverse outputs
-
-## Thinking Injection (Advanced)
-
-Some models support "thinking injection" where you can control the reasoning process by injecting partial thoughts:
-
-```python
-# Works with DeepSeek R1, QwQ, Qwen models
 prompt = "Calculate 10*5 <think>Let me calculate: 10*5="
 result = client.generate(prompt, n_samples=1)
-# Model continues from "=" and completes the calculation
+# Model continues from "=" ("50" would be the next two tokens)
 ```
 
-**Supported models:**
-- ✅ DeepSeek R1 and variants
-- ✅ QwQ models
-- ✅ Qwen models
-- ✅ Claude/Anthropic models
-- ❌ GPT-OSS models (no injection support on OpenRouter)
-- ❌ Gemini thinking models (internal reasoning only)
+## Parameter Override
 
-For more details, see the `THINK_INJECTION.md` documentation.
-
-## Advanced Usage
-
-### Parameter Override
-
-Override any default setting at generation time:
+The default OpenRouter settings are used, but you can override these either when defining the client or when generating responses. The logprobs parameter is not supported here; from what I can tell, it is unreliable on OpenRouter
 
 ```python
 client = RolloutsClient(model="qwen/qwen3-30b-a3b", temperature=0.7)
@@ -130,25 +91,8 @@ rollouts = client.generate(
     temperature=1.5,  # Override default
     max_tokens=2000   # Override default
 )
-```
 
-### Custom Configuration
-
-```python
-from rollouts import RolloutsClient, Config
-
-# Create custom configuration
-config = Config(
-    model="qwen/qwen3-30b-a3b",
-    temperature=0.8,
-    top_p=0.95,
-    max_tokens=2000,
-    presence_penalty=0.1,
-    frequency_penalty=0.1
-)
-
-# Use configuration
-client = RolloutsClient(**config.to_dict())
+result = client.generate(prompt, top_p=0.99)
 ```
 
 ### Caching
@@ -168,16 +112,6 @@ rollouts1 = client.generate("What is 2+2?", n_samples=3)
 # Second call: uses cached responses (instant)
 rollouts2 = client.generate("What is 2+2?", n_samples=3)
 ```
-
-### OpenRouter Implicit Prompt Caching
-
-In addition to this package's local response caching, OpenRouter provides automatic server-side prompt caching for many models. This can significantly reduce costs on repeated API calls with similar prompts:
-
-- **Cost savings**: Cache reads are typically charged at 0.25x to 0.5x the original input token price
-- **Automatic**: Most models (OpenAI, DeepSeek, Grok, Gemini 2.5) enable caching automatically with no configuration needed
-- **Smart routing**: OpenRouter automatically routes to the same provider to maximize cache hits
-
-This server-side caching works independently from this package's local cache. While our local cache eliminates API calls entirely for identical requests, OpenRouter's prompt caching reduces costs when you make similar (but not identical) requests. For full details on pricing and supported models, see [OpenRouter's Prompt Caching documentation](https://openrouter.ai/docs/features/prompt-caching).
 
 ## API Reference
 
@@ -259,7 +193,7 @@ for response in rollouts:
 
 There are three ways to provide API keys:
 
-### 1. Environment Variable (recommended for development)
+### 1. Environment Variable
 ```bash
 export OPENROUTER_API_KEY="your-key-here"
 ```
@@ -281,31 +215,3 @@ responses = client.generate(
     api_key="different-key-here"  # Overrides any default
 )
 ```
-
-**Note:** API keys are never cached or stored to disk.
-
-## Known Limitations
-
-### Logprobs Not Supported
-
-This package does not currently support logprobs (log probabilities). If you try to use `top_logprobs`, you'll get a `NotImplementedError`:
-
-```python
-# This will raise an error:
-client = RolloutsClient(
-    model="openai/gpt-3.5-turbo",
-    top_logprobs=5  # ❌ Not supported
-)
-```
-
-**Why?** OpenRouter's implementation of logprobs appears inconsistent across different providers. Based on examination of multiple providers, the logprobs functionality doesn't work reliably through OpenRouter's API. Until this is resolved upstream, this feature is not implemented in this package.
-
-If you need logprobs, you may need to use the providers' APIs directly rather than through OpenRouter.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-MIT License - see LICENSE file for details.

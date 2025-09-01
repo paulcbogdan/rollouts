@@ -231,6 +231,14 @@ def main():
 
     print(f"\n✓ API key found: {'*' * 20}{os.getenv('OPENROUTER_API_KEY')[-4:]}")
 
+    example_0_reasoning_model()
+    example_1_non_reasoning()
+    example_2_multiple_samples()
+    example_3_think_injection()
+    example_4_parameter_overrides()
+    example_6_different_models()
+    example_7_caching()
+
     # Run synchronous examples
     try:
         example_0_reasoning_model()

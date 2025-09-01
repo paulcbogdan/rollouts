@@ -41,8 +41,8 @@ def detect_model_type(model: str) -> str:
         if m in model_lower:
             return "gemini-thinking"
 
-    # Default to no special handling
-    return "standard"
+    # Default to assuming a model using <think>
+    return "think"
 
 
 def format_messages_with_thinking(
