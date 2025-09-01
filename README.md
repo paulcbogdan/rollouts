@@ -152,42 +152,11 @@ Container for multiple responses.
 Individual response from the model.
 
 **Key Fields:**
-- `full`: The complete response text, formatted as `reasoning_text + "\n</think>\n" + content_text`
+- `full`: The complete response text, formatted as `reasoning_text + "\n</think>\n" + content_text` if a reasoning model; `reasoning_text` if reasoning not finished; `content_text` if not a reasoning model or reasoning is hidden
 - `content`: The post-reasoning text (what comes after `</think>`)
 - `reasoning`: The reasoning/thinking text (what comes before `</think>`)
 - `usage`: Token usage statistics
 - `finish_reason`: Why the response ended (e.g., "stop", "length")
-
-**Understanding the Think Token Format:**
-
-The `full` field is always structured with a `</think>` separator between reasoning and content:
-```
-reasoning_text
-</think>
-content_text
-```
-
-This format is used consistently even for models that don't natively use `<think>` tags:
-- **Models with native think support** (DeepSeek R1, QwQ, Qwen): The reasoning appears naturally
-- **GPT-OSS models**: OpenRouter returns reasoning in a separate field, which we format into this structure
-- **Models without reasoning**: The `full` field contains just the content (no reasoning section)
-
-**Important Note for GPT-OSS Models:**
-
-GPT-OSS models (like `gpt-oss-20b` and `gpt-oss-120b`) use OpenAI's Harmony format internally. On OpenRouter:
-- Reasoning is returned in a separate `reasoning` field by the API
-- You cannot inject or control thinking tokens for these models
-- The `</think>` separator is added by this library for consistency
-- If you need to control reasoning, use models like DeepSeek R1 or QwQ instead
-
-Example accessing Response fields:
-```python
-for response in rollouts:
-    print(f"Full response: {response.full}")
-    print(f"Just content: {response.content}")
-    print(f"Just reasoning: {response.reasoning}")
-    print(f"Tokens used: {response.usage.total_tokens}")
-```
 
 ## API Key Configuration
 
