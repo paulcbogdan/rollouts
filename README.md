@@ -123,9 +123,10 @@ rollouts2 = client.generate("What is 2+2?", n_samples=3)
 ```
 
 **Cache Behavior:**
-- Responses are cached in a hierarchical directory structure: `cache_dir/model/parameters/prompt_hash_prefix/prompt_hash/seed_00000.json`
+- Responses are cached in a hierarchical directory structure: `.rollouts/model/parameters/prompt_hash_prefix/prompt_hash/seed_00000.json`
 - Each unique combination of prompt, model, and parameters gets its own cache location
-- If a cached response has `finish_reason="error"`, it will be regenerated on the next request
+- The prompt hash is split across two directory levels (`prompt_hash_prefix/prompt_hash`) as this helps performance when you have responses saved for >100k prompts. `prompt_hash_prefix` is just the first three hex digits of the prompt hash
+- If a cached response has `finish_reason="error"`, it will not be loaded and is instead regenerated on the next request
 - To clear the cache, simply delete the cache directory or specific subdirectories/files
 
 ## API Key Configuration
