@@ -4,7 +4,7 @@
 
 - You can generate multiple LLM responses ("rollouts") concurrently
 - The package will automatically cache responses. The first time you call `client.generate('your prompt', n_samples=2)`, two jsons will be saved with the model response to each. If you make the same call, those jsons will be loaded
-- You can easily insert text into model's reasoning. If you call `client.generate('What is 5*10?\n<think>\n5*1')` the model response will start `"0"`
+- You can easily insert text into a model's reasoning. If you call `client.generate('What is 5*10?\n<think>\n5*1')` the model response will start `"0"`
 
 Examples are provided below, and additional examples are shown in `example.py`.
 
