@@ -82,7 +82,9 @@ result = client.generate(prompt, n_samples=1)
 # Model continues from "=" ("50" would be the next two tokens)
 ```
 
-By default, I believe `"<think>"` is normally surrounded by `"\n"` for chat completions. You should avoid ending inserted thoughts with a trailing space (`" "`). Doing so will often lead to tokenization issues, as most models tokenize words with a space prefix (e.g., `" Hello"`). When you end inserted thoughts with a trailing space, a model would need to introduce a double-space typo to continue with a word. Models hate this and will thus be strongly biased toward continuing with tokens that don't have a space prefix (e.g., `"0"`).
+I believe `"<think>"` is normally surrounded by `"\n"` for chat completions by default. You probably should do this.
+
+Importantly, you should avoid ending inserted thoughts with a trailing space (`" "`). Doing so will often lead to tokenization issues, as most models tokenize words with a space prefix (e.g., `" Hello"`). When you end inserted thoughts with a trailing space, a model would need to introduce a double-space typo to continue with a word. Models hate this and will thus be strongly biased toward continuing with tokens that don't have a space prefix (e.g., `"0"`).
 
 Does not work for:
 - Models where thinking is hidden (Gemini and OpenAI)
