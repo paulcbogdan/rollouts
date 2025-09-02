@@ -76,15 +76,17 @@ asyncio.run(main())
 
 For models using <think> tags, you can insert thoughts and continue the chain-of-thought from there (this works for Deepseek, Qwen, QwQ, Anthropic, and presumably other models). 
 
-Does not work for:
-- Models where thinking is hidden (Gemini and OpenAI)
-- GPT-OSS-20b/120b, which use a different reasoning template; I tried to get GPT-OSS working, but I'm not sure it's possible with OpenRouter.
-
 ```python
-prompt = "Calculate 10*5 <think>Let me calculate: 10*5="
+prompt = "Calculate 10*5\n<think>\nLet me calculate: 10*5="
 result = client.generate(prompt, n_samples=1)
 # Model continues from "=" ("50" would be the next two tokens)
 ```
+
+By default, I believe `"<think>"` is normally surrounded by `"\n"` for chat completions. You should avoid ending inserted thoughts with a trailing space (`" "`). Doing so will often lead to tokenization issues, as most models tokenize words with a space prefix (e.g., `" Hello"`). When you end inserted thoughts with a trailing space, a model would need to introduce a double-space typo to continue with a word. Models hate this and will thus be strongly biased toward continuing with tokens that don't have a space prefix (e.g., `"0"`).
+
+Does not work for:
+- Models where thinking is hidden (Gemini and OpenAI)
+- GPT-OSS-20b/120b, which use a different reasoning template; I tried to get GPT-OSS working, but I'm not sure it's possible with OpenRouter
 
 ## Parameter Override
 
