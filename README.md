@@ -29,6 +29,8 @@ export OPENROUTER_API_KEY="your-key-here"
 
 ### Synchronous Usage
 
+Model responses are always via the chat-completions API.
+
 ```python
 from rollouts import RolloutsClient
 
