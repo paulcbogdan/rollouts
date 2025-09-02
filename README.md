@@ -46,7 +46,7 @@ rollouts = client.generate("What is the meaning of life?", n_samples=5)
 
 # Access responses
 for response in rollouts:
-    print(f"Reasoning: {response.reasoning=}") # reasoning text if reasoning model; None if non-reasoning model or if reasoning is hidden
+    print(f"Reasoning: {response.reasoning=}") # reasoning text if reasoning model; None if non-reasoning model
     print(f"Content: {response.content=}") # post-reasoning output (or just output if not a reasoning model)
     print(f"Response: {response.full=}") # "{reasoning}</think>{content}" if reasoning exists and completed; "{reasoning}" if reasoning not completed; "{content}" if non-reasoning model or if reasoning is hidden
 ```
@@ -87,8 +87,8 @@ I believe `"<think>"` is normally surrounded by `"\n"` for chat completions by d
 Importantly, you should avoid ending inserted thoughts with a trailing space (`" "`). Doing so will often cause tokenization issues, as most models tokenize words with a space prefix (e.g., `" Hello"`). When you insert thoughts with a trailing space, a model would need to introduce a double-space typo to continue with a word. Models hate typos and will thus be strongly biased toward continuing with tokens that don't have a space prefix (e.g., `"0"`).
 
 Inserting thoughts does not work for:
-- Models where thinking is hidden (Gemini and OpenAI)
-- GPT-OSS-20b/120b, which use a different reasoning template; I tried to get GPT-OSS working, but I'm not sure it's possible with OpenRouter
+- Models where true thinking tokens are hidden (Gemini and OpenAI)
+- GPT-OSS-20b/120b, which use a different reasoning template; I tried to get the GPT-OSS template working, but I'm not sure it's possible with OpenRouter
 
 ## Parameter Override
 
@@ -107,6 +107,32 @@ rollouts = client.generate(
 
 result = client.generate(prompt, top_p=0.99)
 ```
+
+### Progress Bar
+
+A progress bar automatically appears when generating multiple responses (n_samples > 1):
+
+```python
+client = RolloutsClient(
+    model="qwen/qwen3-30b-a3b",
+    progress_bar=True  # Default, can be disabled
+)
+
+# Shows a progress bar for multiple samples
+rollouts = client.generate("Write a story", n_samples=5)
+
+# No progress bar for single sample (even if enabled)
+rollout = client.generate("Quick answer", n_samples=1)
+
+# Disable progress bar for a specific request
+rollouts = client.generate("Silent generation", n_samples=10, progress_bar=False)
+```
+
+The progress bar:
+- Only appears when n_samples > 1
+- Shows the number of responses being generated
+- Automatically disappears when complete
+- Can be disabled globally (in client init) or per-request
 
 ### Caching
 
@@ -157,5 +183,20 @@ responses = client.generate(
     "Your prompt",
     n_samples=5,
     api_key="different-key-here"  # Overrides any default
+)
+```
+
+## Additional Notes
+
+### Progress Bar
+A progress bar appears when generating multiple responses (`n_samples > 1`). You can disable it by setting `progress_bar=False` either when creating the client or for individual requests.
+
+### Rate Limiting
+You can limit the requests per minute when defining your client using the `requests_per_minute` parameter (token bucket rate limiter):
+
+```python
+client = RolloutsClient(
+    model="qwen/qwen3-30b-a3b",
+    requests_per_minute=60  # Limit to 60 requests per minute
 )
 ```

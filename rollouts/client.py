@@ -6,6 +6,8 @@ import asyncio
 from typing import Optional, List, Dict, Any, Union
 from concurrent.futures import ThreadPoolExecutor
 
+from tqdm.asyncio import tqdm as tqdm_async
+
 from .datatypes import Rollouts, Response
 from .cache import ResponseCache
 from .openrouter import OpenRouter
@@ -53,6 +55,7 @@ class RolloutsClient:
         use_cache: bool = True,
         cache_dir: str = ".rollouts",
         requests_per_minute: Optional[int] = None,
+        progress_bar: bool = True,
         **kwargs,
     ):
         """
@@ -78,6 +81,7 @@ class RolloutsClient:
             use_cache: Enable response caching
             cache_dir: Directory for cache files
             requests_per_minute: Rate limit for API requests (None = no limit)
+            progress_bar: Show progress bar for multiple samples (default: True)
             **kwargs: Additional OpenRouter-specific parameters such as:
                 - min_p (float): Minimum probability threshold (0.0-1.0)
                 - top_a (float): Top-a sampling parameter (0.0-1.0)
@@ -107,6 +111,7 @@ class RolloutsClient:
         self.use_cache = use_cache
         self.cache_dir = cache_dir
         self.requests_per_minute = requests_per_minute
+        self.progress_bar = progress_bar
 
         # Additional parameters from kwargs
         for key, value in kwargs.items():
@@ -191,6 +196,7 @@ class RolloutsClient:
         presence_penalty: Optional[float] = None,
         frequency_penalty: Optional[float] = None,
         seed: Optional[int] = None,
+        progress_bar: Optional[bool] = None,
         **kwargs,
     ) -> Rollouts:
         """
@@ -206,6 +212,7 @@ class RolloutsClient:
             presence_penalty: Override default presence_penalty
             frequency_penalty: Override default frequency_penalty
             seed: Starting seed for generation
+            progress_bar: Override default progress_bar setting
             **kwargs: Additional parameters to override (including api_key)
 
         Returns:
@@ -230,6 +237,7 @@ class RolloutsClient:
                 "presence_penalty": presence_penalty,
                 "frequency_penalty": frequency_penalty,
                 "seed": seed,
+                "progress_bar": progress_bar,
                 **kwargs,
             }.items()
             if v is not None
@@ -255,6 +263,7 @@ class RolloutsClient:
             "use_cache",
             "cache_dir",
             "requests_per_minute",
+            "progress_bar",
         ]:
             if hasattr(self, attr):
                 config[attr] = getattr(self, attr)
@@ -331,7 +340,44 @@ class RolloutsClient:
 
         # Execute tasks concurrently
         if tasks:
-            results = await asyncio.gather(*[task for _, task in tasks])
+            # Determine if we should show a progress bar
+            show_progress = config.get("progress_bar", True) and n_samples > 1
+            
+            if show_progress:
+                # Use tqdm for progress tracking
+                results = [None] * len(tasks)
+                
+                # Create list of tasks with their indices
+                indexed_tasks = [(i, task) for i, (seed, task) in enumerate(tasks)]
+                
+                # Create progress bar
+                pbar = tqdm_async(
+                    total=len(tasks),
+                    desc=f"Generating {len(tasks)} response{'s' if len(tasks) > 1 else ''}",
+                    leave=False,  # Auto-delete progress bar when done
+                    unit="response",
+                    colour="green",
+                )
+                
+                # Create wrapper coroutines that update progress
+                async def run_with_progress(index, task):
+                    result = await task
+                    pbar.update(1)
+                    return index, result
+                
+                # Run all tasks with progress tracking
+                completed = await asyncio.gather(
+                    *[run_with_progress(i, task) for i, task in indexed_tasks]
+                )
+                
+                # Sort results back to original order
+                for idx, result in completed:
+                    results[idx] = result
+                
+                pbar.close()
+            else:
+                # No progress bar for single sample or if disabled
+                results = await asyncio.gather(*[task for _, task in tasks])
 
             for (current_seed, _), response in zip(tasks, results):
                 if response.finish_reason != "error":
@@ -383,7 +429,7 @@ class RolloutsClient:
             echo_enabled=False,  # OpenRouter doesn't support echo mode
         )
 
-    def generate(self, prompt: str, n_samples: Optional[int] = None, **kwargs) -> Rollouts:
+    def generate(self, prompt: str, n_samples: Optional[int] = None, progress_bar: Optional[bool] = None, **kwargs) -> Rollouts:
         """
         Generate multiple responses synchronously.
 
@@ -392,6 +438,7 @@ class RolloutsClient:
         Args:
             prompt: Input prompt
             n_samples: Number of samples to generate (default: 1)
+            progress_bar: Override default progress_bar setting
             **kwargs: Additional parameters (see agenerate for full list)
 
         Returns:
@@ -407,11 +454,11 @@ class RolloutsClient:
 
         if loop and loop.is_running():
             # We're already in an async context, use thread pool
-            future = self._executor.submit(asyncio.run, self.agenerate(prompt, n_samples, **kwargs))
+            future = self._executor.submit(asyncio.run, self.agenerate(prompt, n_samples, progress_bar=progress_bar, **kwargs))
             return future.result()
         else:
             # No async context, run directly
-            return asyncio.run(self.agenerate(prompt, n_samples, **kwargs))
+            return asyncio.run(self.agenerate(prompt, n_samples, progress_bar=progress_bar, **kwargs))
 
     def __repr__(self) -> str:
         """String representation."""

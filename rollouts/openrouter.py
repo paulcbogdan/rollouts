@@ -130,6 +130,10 @@ class OpenRouter:
                         continue
 
                     elif response.status_code != 200:
+                        if config["verbose"]:
+                            print(
+                                f"API error ({response.status_code}) on attempt {attempt+1}/{config['max_retries']}. Returned json:\n{response.json()}"
+                            )
                         if attempt == config["max_retries"] - 1:
                             return self._error_response(
                                 f"API error: {response.status_code}", config["model"]

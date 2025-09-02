@@ -197,6 +197,7 @@ def example_7_caching():
         max_tokens=100,
         use_cache=True,  # Default, but shown explicitly
         verbose=True,  # Show cache hits
+        progress_bar=False,  # Disable progress bar for this example
     )
 
     prompt = "What is the capital of France?"
@@ -237,7 +238,7 @@ def example_8_provider_routing():
 
     prompt = "What is Python?"
     rollouts = client.generate(prompt, n_samples=1)
-    
+
     print(f"Prompt: {prompt}")
     print(f"Response from provider '{rollouts[0].provider}': {rollouts[0].full=}")
     print("\nNote: Provider routing allows you to:")
@@ -269,7 +270,7 @@ def example_9_rate_limiting():
 
     print("Generating 3 responses with rate limiting (60 RPM)...")
     print("This ensures we don't exceed API rate limits")
-    
+
     for i, prompt in enumerate(prompts, 1):
         t_start = time.time()
         rollouts = client.generate(prompt, n_samples=1)
@@ -297,7 +298,7 @@ def example_10_advanced_parameters():
 
     prompt = "Write a short story about a robot. Be creative and avoid repetition."
     rollouts = client.generate(prompt, n_samples=1)
-    
+
     print(f"Prompt: {prompt}")
     print(f"\nResponse with advanced parameters:")
     print(f"{rollouts[0].full}")
@@ -307,10 +308,44 @@ def example_10_advanced_parameters():
     print("- top_a=0.8 (alternative to top_p sampling)")
 
 
-def example_11_reasoning_config():
-    """Example 11: Configure reasoning for models that support it."""
+def example_11_progress_bar():
+    """Example 11: Demonstrate progress bar functionality."""
     print("\n" + "=" * 50)
-    print("EXAMPLE 11: Reasoning Configuration")
+    print("EXAMPLE 11: Progress Bar")
+    print("=" * 50)
+
+    client = RolloutsClient(
+        model="qwen/qwen-2.5-7b-instruct",
+        temperature=0.7,
+        max_tokens=50,
+        progress_bar=True,  # Enabled by default
+    )
+
+    print("Generating multiple responses with progress bar:")
+    print("(Progress bar appears for n_samples > 1)")
+
+    # This will show a progress bar
+    rollouts = client.generate("Write a one-line joke", n_samples=5)  # Progress bar will appear
+
+    print(f"\nGenerated {len(rollouts)} responses")
+    for i, response in enumerate(rollouts, 1):
+        print(f"{i}. {response.full[:50]}...")
+
+    print("\nSingle response (no progress bar):")
+    single = client.generate("Quick fact", n_samples=1)
+    print(f"Response: {single[0].full[:100]}...")
+
+    print("\nDisabling progress bar for a specific request:")
+    quiet_rollouts = client.generate(
+        "Another joke", n_samples=3, progress_bar=False  # Override to disable
+    )
+    print(f"Generated {len(quiet_rollouts)} responses silently")
+
+
+def example_12_reasoning_config():
+    """Example 12: Configure reasoning for models that support it."""
+    print("\n" + "=" * 50)
+    print("EXAMPLE 12: Reasoning Configuration")
     print("=" * 50)
 
     # Configure reasoning behavior
@@ -327,11 +362,11 @@ def example_11_reasoning_config():
     )
 
     prompt = "Solve: If a train travels 60 mph for 2.5 hours, how far does it go?"
-    
+
     try:
         rollouts = client.generate(prompt, n_samples=1)
         response = rollouts[0]
-        
+
         print(f"Prompt: {prompt}")
         if response.reasoning:
             print(f"\nReasoning process:")
@@ -356,31 +391,19 @@ def main():
 
     print(f"\n✓ API key found: {'*' * 20}{os.getenv('OPENROUTER_API_KEY')[-4:]}")
 
-    # Run synchronous examples
-    try:
-        example_0_reasoning_model()
-        example_1_non_reasoning()
-        example_2_multiple_samples()
-        example_3_think_injection()
-        example_4_parameter_overrides()
-        example_6_different_models()
-        example_7_caching()
-        example_8_provider_routing()
-        example_9_rate_limiting()
-        example_10_advanced_parameters()
-        example_11_reasoning_config()
-
-        # Run async example
-        print("\nRunning async example...")
-        asyncio.run(example_5_async_usage())
-
-    except Exception as e:
-        print(f"\n❌ Error running examples: {e}")
-        print("This might be due to:")
-        print("- Invalid API key")
-        print("- Network issues")
-        print("- Model not available")
-        return
+    example_0_reasoning_model()
+    example_1_non_reasoning()
+    example_2_multiple_samples()
+    example_3_think_injection()
+    example_4_parameter_overrides()
+    asyncio.run(example_5_async_usage())
+    example_6_different_models()
+    example_7_caching()
+    example_8_provider_routing()
+    example_9_rate_limiting()
+    example_10_advanced_parameters()
+    example_11_progress_bar()
+    example_12_reasoning_config()
 
     print("\n" + "=" * 50)
     print("✅ ALL EXAMPLES COMPLETED!")
@@ -396,7 +419,8 @@ def main():
     print("8. Provider routing gives control over which AI provider to use")
     print("9. Rate limiting helps avoid hitting API limits")
     print("10. Advanced parameters provide fine control over generation")
-    print("11. Reasoning can be configured for supported models")
+    print("11. Progress bar shows generation status for multiple samples")
+    print("12. Reasoning can be configured for supported models")
 
     print("\nFor more information, see README.md")
 

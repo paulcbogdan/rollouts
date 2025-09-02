@@ -6,7 +6,7 @@ from .client import RolloutsClient
 from .datatypes import Rollouts, Response, Usage
 from .openrouter import OpenRouter
 
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 
 __all__ = [
     "RolloutsClient",
