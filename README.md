@@ -8,6 +8,8 @@
 
 Examples are provided below, and additional examples are shown in `example.py`.
 
+## Paper
+
 This code is meant to help with implementing the chain-of-thought resampling techniques described in this paper:
 
 Bogdan, P.C.\*, Macar, U.\*, Nanda, N.°, & Conmy, A.° (2025). Thought Anchors: Which LLM Reasoning Steps Matter?. arXiv preprint arXiv:2506.19143. [PDF](https://arxiv.org/pdf/2506.19143)
