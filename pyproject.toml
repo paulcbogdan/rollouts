@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rollouts"
-version = "0.1.4"
+version = "0.1.5"
 description = "A high-quality Python package for generating multiple LLM responses with built-in resampling, caching, and provider abstraction"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -7,6 +7,7 @@ import time
 import asyncio
 from typing import Optional, Dict, Any
 import httpx
+import json
 
 from .datatypes import Response, Usage
 from .types import GenerationConfig, APIResponse
@@ -142,7 +143,18 @@ class OpenRouter:
                         await asyncio.sleep(delay)
                         continue
 
-                    result = response.json()
+                    try:
+                        result = response.json()
+                    except json.decoder.JSONDecodeError:
+                        if config["verbose"]:
+                            print(f"JSON decode error on attempt {attempt+1}/{config['max_retries']}. Returned response:\n{response}")
+                        if attempt == config["max_retries"] - 1:
+                            return self._error_response(
+                                f"JSON decode error: {response.status_code}", config["model"]
+                            )
+                        delay = min(retry_delay * (2**attempt), 60)
+                        continue
+
                     return self._parse_response(result, config["model"], seed)
 
             except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
