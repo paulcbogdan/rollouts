@@ -3,7 +3,7 @@
 `rollouts` is python package for conveniently interacting with the OpenRouter API. The package provides three notable features:
 
 - You can generate multiple LLM responses ("rollouts") concurrently for the same prompt
-- The package will automatically cache responses. The first time you call `client.generate('your prompt', n_samples=2)`, two jsons will be saved with the model response to each. If you make the same call, those jsons will be loaded
+- The package will automatically cache responses. The first time you call `client.generate('your prompt', n_samples=2)`, two jsons will be saved with the model response to each. If you make the same call, those jsons will be loaded. If you set `use_cache="sql"`, caching/loading will be instead done using a SQLite database
 - You can easily insert text into a model's reasoning. If you call `client.generate('What is 5*10?\n<think>\n5*1')`, this will insert `\n5*1'` into the model's reasoning, which will continue with `"0..."`
 
 Examples are provided below, and additional examples are shown in `example.py`.
@@ -101,8 +101,10 @@ client = RolloutsClient(model="qwen/qwen3-30b-a3b", temperature=0.7)
 rollouts = client.generate(
     "Be creative!",
     n_samples=5,
-    temperature=1.5,  # Override default
-    max_tokens=2000   # Override default
+    temperature=1.5,
+    max_tokens=2000,
+    use_cache="sql", # Default = "json"
+    requests_per_minute=200 # Default = None; no limit
 )
 
 result = client.generate(prompt, top_p=0.99)

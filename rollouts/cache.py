@@ -1,5 +1,6 @@
 """
 Response caching utilities.
+SQLite-based response caching replaces the file-based cache with a more scalable SQLite database.
 """
 
 import hashlib
@@ -10,8 +11,16 @@ from typing import Optional, Dict, Any
 
 from .datatypes import Response, Usage
 
+import hashlib
+import json
+import sqlite3
+import threading
+from typing import Optional, Dict, Any
+from contextlib import contextmanager
+import time
 
-class ResponseCache:
+
+class ResponseCacheJson:
     """Manages cached LLM responses with filesystem-based storage.
 
     The cache uses a hierarchical directory structure to efficiently store
@@ -261,3 +270,369 @@ class ResponseCache:
         cache_path = cache_path / prompt_hash_start / prompt_hash
 
         return str(cache_path)
+
+
+
+class ResponseCacheSQL:
+    """SQLite-based cache for LLM responses.
+
+    Uses a single SQLite database file instead of millions of JSON files.
+    Provides fast lookups with proper indexing and handles concurrent access.
+    """
+
+    def __init__(self, cache_dir: str = ".rollouts", model: Optional[str] = None):
+        """Initialize the SQLite cache.
+
+        Args:
+            cache_dir: Directory for the SQLite database file
+            model: Model name to use for database filename (optional)
+        """
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Use model name for database filename if provided
+        if model:
+            # Clean model name for filesystem compatibility
+            db_name = model.replace("/", "-").replace(":", "").replace("@", "-at-")
+            db_name = db_name.replace(" ", "-").lower()
+            self.db_path = self.cache_dir / f"{db_name}.db"
+        else:
+            self.db_path = self.cache_dir / "cache.db"
+
+        # Thread-local storage for connections
+        self._local = threading.local()
+
+        # Initialize database schema
+        self._init_db()
+
+        # Optionally configure SQLite for better performance
+        self._optimize_sqlite()
+    
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get thread-local database connection."""
+        if not hasattr(self._local, 'conn'):
+            self._local.conn = sqlite3.connect(
+                str(self.db_path),
+                timeout=30.0,  # 30 second timeout for locks
+                check_same_thread=False
+            )
+            # Enable WAL mode for better concurrency
+            self._local.conn.execute("PRAGMA journal_mode=WAL")
+            self._local.conn.execute("PRAGMA synchronous=NORMAL")
+        return self._local.conn
+    
+    @contextmanager
+    def _get_cursor(self):
+        """Context manager for database operations."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            yield cursor
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+    
+    def _init_db(self):
+        """Initialize database schema."""
+        # Use direct connection for initialization
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            cursor = conn.cursor()
+
+            # Main cache table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS responses (
+                    cache_key TEXT PRIMARY KEY,
+                    prompt_hash TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    params_hash TEXT NOT NULL,
+                    seed INTEGER NOT NULL,
+                    response_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    accessed_at INTEGER NOT NULL,
+                    access_count INTEGER DEFAULT 1
+                )
+            """)
+
+            # Indexes for fast lookups
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_prompt_model
+                ON responses(prompt_hash, model)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_params
+                ON responses(params_hash)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_created
+                ON responses(created_at)
+            """)
+
+            # Optional: Table for storing metadata/statistics
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cache_stats (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def _optimize_sqlite(self):
+        """Apply SQLite optimizations for better performance."""
+        # Use direct connection for optimization
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            cursor = conn.cursor()
+
+            # Increase cache size (negative value = KB)
+            cursor.execute("PRAGMA cache_size = -64000")  # 64MB cache
+
+            # Faster but less safe (still quite safe with WAL)
+            cursor.execute("PRAGMA synchronous = NORMAL")
+
+            # Enable memory mapping for faster reads
+            cursor.execute("PRAGMA mmap_size = 268435456")  # 256MB
+
+            # Optimize for SSDs
+            cursor.execute("PRAGMA journal_mode = WAL")
+            cursor.execute("PRAGMA wal_autocheckpoint = 1000")
+
+            conn.commit()
+        finally:
+            conn.close()
+    
+    def _compute_cache_key(
+        self,
+        prompt: str,
+        model: str,
+        provider: Optional[Dict[str, Any]],
+        temperature: float,
+        top_p: float,
+        max_tokens: int,
+        seed: int,
+        top_k: Optional[int] = None,
+        presence_penalty: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+    ) -> tuple[str, str, str]:
+        """Compute cache key components.
+        
+        Returns:
+            Tuple of (full_cache_key, prompt_hash, params_hash)
+        """
+        # Hash the prompt
+        prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        
+        # Create parameters dictionary for hashing
+        params = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+            "top_k": top_k,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
+            "provider": provider,
+        }
+        
+        # Remove None values and hash
+        params = {k: v for k, v in params.items() if v is not None}
+        params_str = json.dumps(params, sort_keys=True)
+        params_hash = hashlib.sha256(params_str.encode()).hexdigest()[:16]
+        
+        # Combine into full cache key
+        cache_key = f"{model}:{prompt_hash[:16]}:{params_hash}:{seed}"
+        
+        return cache_key, prompt_hash, params_hash
+    
+    def get(
+        self,
+        prompt: str,
+        model: str,
+        provider: Optional[Dict[str, Any]],
+        temperature: float,
+        top_p: float,
+        max_tokens: int,
+        seed: int,
+        top_k: Optional[int] = None,
+        presence_penalty: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+    ) -> Optional[Response]:
+        """Get cached response if available."""
+        cache_key, prompt_hash, params_hash = self._compute_cache_key(
+            prompt, model, provider, temperature, top_p,
+            max_tokens, seed, top_k, presence_penalty, frequency_penalty
+        )
+        
+        with self._get_cursor() as cursor:
+            # Get cached response and update access stats
+            cursor.execute("""
+                UPDATE responses 
+                SET accessed_at = ?, access_count = access_count + 1
+                WHERE cache_key = ?
+                RETURNING response_json
+            """, (int(time.time()), cache_key))
+            
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            # Parse JSON and create Response object
+            data = json.loads(row[0])
+            return self._dict_to_response(data, model, provider, seed)
+    
+    def set(
+        self,
+        prompt: str,
+        model: str,
+        provider: Optional[Dict[str, Any]],
+        temperature: float,
+        top_p: float,
+        max_tokens: int,
+        seed: int,
+        response: Response,
+        top_k: Optional[int] = None,
+        presence_penalty: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+    ) -> bool:
+        """Cache a response."""
+        cache_key, prompt_hash, params_hash = self._compute_cache_key(
+            prompt, model, provider, temperature, top_p,
+            max_tokens, seed, top_k, presence_penalty, frequency_penalty
+        )
+        
+        # Prepare response data
+        response_data = {
+            "response": response.to_dict(),
+            "prompt": prompt,
+            "model": model,
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+            "seed": seed,
+            "provider": provider,
+        }
+        
+        response_json = json.dumps(response_data)
+        current_time = int(time.time())
+        
+        with self._get_cursor() as cursor:
+            # UPSERT: Insert or replace existing
+            cursor.execute("""
+                INSERT OR REPLACE INTO responses 
+                (cache_key, prompt_hash, model, params_hash, seed, 
+                 response_json, created_at, accessed_at, access_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 
+                    COALESCE((SELECT access_count FROM responses WHERE cache_key = ?), 0) + 1)
+            """, (cache_key, prompt_hash, model, params_hash, seed,
+                  response_json, current_time, current_time, cache_key))
+        
+        return True
+    
+    def _dict_to_response(
+        self,
+        data: Dict[str, Any],
+        model: str,
+        provider: Optional[Dict[str, Any]],
+        seed: int
+    ) -> Response:
+        """Convert dictionary data to Response object."""
+        resp_data = data["response"]
+        
+        # Create Usage object
+        usage_data = resp_data.get("usage", {})
+        usage = Usage(
+            prompt_tokens=usage_data.get("prompt_tokens", 0),
+            completion_tokens=usage_data.get("completion_tokens", 0),
+            total_tokens=usage_data.get("total_tokens", 0),
+        )
+        
+        # Create Response
+        return Response(
+            full=resp_data.get("full", resp_data.get("full_text", resp_data.get("text", ""))),
+            content=resp_data.get("content", resp_data.get("post", "")),
+            reasoning=resp_data.get("reasoning", ""),
+            finish_reason=resp_data.get("finish_reason", ""),
+            provider=resp_data.get("provider", provider),
+            response_id=resp_data.get("response_id", ""),
+            model=resp_data.get("model", model),
+            object=resp_data.get("object", ""),
+            created=resp_data.get("created", 0),
+            usage=usage,
+            logprobs=resp_data.get("logprobs"),
+            echo=resp_data.get("echo", False),
+            seed=seed,
+        )
+    
+    def get_cache_dir(
+        self,
+        prompt: str,
+        model: str,
+        provider: Optional[Dict[str, Any]],
+        temperature: float,
+        top_p: float,
+        max_tokens: int,
+        top_k: Optional[int] = None,
+        presence_penalty: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+    ) -> str:
+        """Get the cache directory (returns database path for compatibility)."""
+        return str(self.db_path)
+    
+    def clear_old_entries(self, days: int = 30):
+        """Clear cache entries older than specified days."""
+        cutoff_time = int(time.time()) - (days * 86400)
+        
+        with self._get_cursor() as cursor:
+            cursor.execute("""
+                DELETE FROM responses 
+                WHERE accessed_at < ?
+            """, (cutoff_time,))
+            
+            # Run VACUUM to reclaim space (optional)
+            cursor.execute("VACUUM")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        with self._get_cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_entries,
+                    SUM(LENGTH(response_json)) as total_size,
+                    AVG(access_count) as avg_access_count,
+                    MAX(access_count) as max_access_count
+                FROM responses
+            """)
+            
+            row = cursor.fetchone()
+            return {
+                "total_entries": row[0] or 0,
+                "total_size_mb": (row[1] or 0) / (1024 * 1024),
+                "avg_access_count": row[2] or 0,
+                "max_access_count": row[3] or 0,
+                "db_path": str(self.db_path),
+            }
+    
+    def export_to_json(self, output_dir: str, limit: Optional[int] = None):
+        """Export cache entries to JSON files (for backward compatibility)."""
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        with self._get_cursor() as cursor:
+            query = "SELECT cache_key, response_json FROM responses"
+            if limit:
+                query += f" LIMIT {limit}"
+            
+            cursor.execute(query)
+            
+            for cache_key, response_json in cursor:
+                file_path = output_path / f"{cache_key}.json"
+                with open(file_path, 'w') as f:
+                    f.write(response_json)
+    

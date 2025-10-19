@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm.asyncio import tqdm as tqdm_async
 
 from .datatypes import Rollouts, Response
-from .cache import ResponseCache
+from .cache import ResponseCacheJson, ResponseCacheSQL
 from .openrouter import OpenRouter
 from .rate_limiter import get_rate_limiter
 from .types import ProviderConfig, ReasoningConfig, GenerationConfig
@@ -52,7 +52,7 @@ class RolloutsClient:
         max_retries: int = 100,
         timeout: int = 300,
         verbose: bool = False,
-        use_cache: bool = True,
+        use_cache: Union[bool, str] = "sql",
         cache_dir: str = ".rollouts",
         requests_per_minute: Optional[int] = None,
         progress_bar: bool = True,
@@ -121,7 +121,10 @@ class RolloutsClient:
         self._validate_params()
 
         # Check for unsupported features
-        if getattr(self, "top_logprobs", None) is not None and self.top_logprobs > 0:
+        if (
+            getattr(self, "top_logprobs", None) is not None
+            and self.top_logprobs > 0
+        ):
             raise NotImplementedError(
                 "logprobs are not currently supported. OpenRouter's implementation "
                 "of logprobs appears inconsistent across providers, so this feature "
@@ -132,7 +135,20 @@ class RolloutsClient:
         self._init_provider(api_key)
 
         # Initialize cache
-        self.cache = ResponseCache(cache_dir) if use_cache else None
+        if isinstance(use_cache, str):
+            if use_cache.lower() == "sql":
+                self.cache = ResponseCacheSQL(cache_dir, model=self.model)
+            elif use_cache.lower() == "json":
+                self.cache = ResponseCacheJson(cache_dir)
+            else:
+                raise ValueError(f"Invalid cache type: {use_cache}")
+        elif isinstance(use_cache, bool):
+            if use_cache:
+                self.cache = ResponseCacheJson(cache_dir)
+            else:
+                self.cache = None
+        else:
+            self.cache = None
 
         # Initialize rate limiter if specified
         self.rate_limiter = None
@@ -152,27 +168,44 @@ class RolloutsClient:
             raise ValueError("model parameter is required")
 
         if self.temperature is not None and not 0.0 <= self.temperature <= 2.0:
-            raise ValueError(f"temperature must be between 0.0 and 2.0, got {self.temperature}")
+            raise ValueError(
+                f"temperature must be between 0.0 and 2.0, got {self.temperature}"
+            )
 
         if self.top_p is not None and not 0.0 < self.top_p <= 1.0:
-            raise ValueError(f"top_p must be between (0.0, 1.0], got {self.top_p}")
+            raise ValueError(
+                f"top_p must be between (0.0, 1.0], got {self.top_p}"
+            )
 
         if self.max_tokens is not None and self.max_tokens < 1:
-            raise ValueError(f"max_tokens must be positive, got {self.max_tokens}")
+            raise ValueError(
+                f"max_tokens must be positive, got {self.max_tokens}"
+            )
 
-        if self.frequency_penalty is not None and not -2.0 <= self.frequency_penalty <= 2.0:
+        if (
+            self.frequency_penalty is not None
+            and not -2.0 <= self.frequency_penalty <= 2.0
+        ):
             raise ValueError(
                 f"frequency_penalty must be between -2.0 and 2.0, got {self.frequency_penalty}"
             )
 
-        if self.presence_penalty is not None and not -2.0 <= self.presence_penalty <= 2.0:
+        if (
+            self.presence_penalty is not None
+            and not -2.0 <= self.presence_penalty <= 2.0
+        ):
             raise ValueError(
                 f"presence_penalty must be between -2.0 and 2.0, got {self.presence_penalty}"
             )
 
         repetition_penalty = getattr(self, "repetition_penalty", None)
-        if repetition_penalty is not None and not 0.0 < repetition_penalty <= 2.0:
-            raise ValueError(f"repetition_penalty must be between (0, 2], got {repetition_penalty}")
+        if (
+            repetition_penalty is not None
+            and not 0.0 < repetition_penalty <= 2.0
+        ):
+            raise ValueError(
+                f"repetition_penalty must be between (0, 2], got {repetition_penalty}"
+            )
 
         if self.top_k is not None and self.top_k < 1:
             raise ValueError(f"top_k must be >= 1, got {self.top_k}")
@@ -288,7 +321,10 @@ class RolloutsClient:
         config.update(overrides)
 
         # Check for unsupported features
-        if config.get("top_logprobs") is not None and config["top_logprobs"] > 0:
+        if (
+            config.get("top_logprobs") is not None
+            and config["top_logprobs"] > 0
+        ):
             raise NotImplementedError(
                 "logprobs are not currently supported. OpenRouter's implementation "
                 "of logprobs appears inconsistent across providers, so this feature "
@@ -326,7 +362,9 @@ class RolloutsClient:
                     continue
                 elif cached and cached.finish_reason == "error":
                     if config["verbose"]:
-                        print(f"Found cached error for seed {current_seed}, regenerating...")
+                        print(
+                            f"Found cached error for seed {current_seed}, regenerating..."
+                        )
 
             # Add generation task
             tasks.append(
@@ -342,14 +380,16 @@ class RolloutsClient:
         if tasks:
             # Determine if we should show a progress bar
             show_progress = config.get("progress_bar", True) and n_samples > 1
-            
+
             if show_progress:
                 # Use tqdm for progress tracking
                 results = [None] * len(tasks)
-                
+
                 # Create list of tasks with their indices
-                indexed_tasks = [(i, task) for i, (seed, task) in enumerate(tasks)]
-                
+                indexed_tasks = [
+                    (i, task) for i, (seed, task) in enumerate(tasks)
+                ]
+
                 # Create progress bar
                 pbar = tqdm_async(
                     total=len(tasks),
@@ -358,22 +398,22 @@ class RolloutsClient:
                     unit="response",
                     colour="green",
                 )
-                
+
                 # Create wrapper coroutines that update progress
                 async def run_with_progress(index, task):
                     result = await task
                     pbar.update(1)
                     return index, result
-                
+
                 # Run all tasks with progress tracking
                 completed = await asyncio.gather(
                     *[run_with_progress(i, task) for i, task in indexed_tasks]
                 )
-                
+
                 # Sort results back to original order
                 for idx, result in completed:
                     results[idx] = result
-                
+
                 pbar.close()
             else:
                 # No progress bar for single sample or if disabled
@@ -398,7 +438,9 @@ class RolloutsClient:
                         )
                     responses.append(response)
                 elif config["verbose"]:
-                    print(f"Error generating response for seed {current_seed}: {response.full}")
+                    print(
+                        f"Error generating response for seed {current_seed}: {response.full}"
+                    )
 
         # Get cache directory
         cache_dir = None
@@ -429,7 +471,13 @@ class RolloutsClient:
             echo_enabled=False,  # OpenRouter doesn't support echo mode
         )
 
-    def generate(self, prompt: str, n_samples: Optional[int] = None, progress_bar: Optional[bool] = None, **kwargs) -> Rollouts:
+    def generate(
+        self,
+        prompt: str,
+        n_samples: Optional[int] = None,
+        progress_bar: Optional[bool] = None,
+        **kwargs,
+    ) -> Rollouts:
         """
         Generate multiple responses synchronously.
 
@@ -454,12 +502,24 @@ class RolloutsClient:
 
         if loop and loop.is_running():
             # We're already in an async context, use thread pool
-            future = self._executor.submit(asyncio.run, self.agenerate(prompt, n_samples, progress_bar=progress_bar, **kwargs))
+            future = self._executor.submit(
+                asyncio.run,
+                self.agenerate(
+                    prompt, n_samples, progress_bar=progress_bar, **kwargs
+                ),
+            )
             return future.result()
         else:
             # No async context, run directly
-            return asyncio.run(self.agenerate(prompt, n_samples, progress_bar=progress_bar, **kwargs))
+            return asyncio.run(
+                self.agenerate(
+                    prompt, n_samples, progress_bar=progress_bar, **kwargs
+                )
+            )
 
     def __repr__(self) -> str:
         """String representation."""
-        return f"RolloutsClient(model='{self.model}', " f"temperature={self.temperature})"
+        return (
+            f"RolloutsClient(model='{self.model}', "
+            f"temperature={self.temperature})"
+        )

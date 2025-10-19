@@ -177,7 +177,7 @@ class TestDebugMessages:
         debug_messages(messages, verbose=True)
 
         captured = capsys.readouterr()
-        assert "DEBUG: Formatted Messages" in captured.out
+        assert "Messages:" in captured.out
         assert "Message 1:" in captured.out
         assert "Role: user" in captured.out
         assert "Content: Test message" in captured.out

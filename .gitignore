@@ -88,3 +88,4 @@ install_dev.py
 dmypy.json
 
 htmlcov/
+testing/

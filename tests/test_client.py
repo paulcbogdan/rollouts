@@ -8,7 +8,7 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import pytest
 
 from rollouts import RolloutsClient, Response, Usage, Rollouts
-from rollouts.cache import ResponseCache
+from rollouts.cache import ResponseCacheJson
 
 
 class TestRolloutsClientInit:
@@ -22,7 +22,7 @@ class TestRolloutsClientInit:
         assert client.temperature == 0.7
         assert client.top_p == 0.95
         assert client.max_tokens == 4096
-        assert client.use_cache is True
+        assert client.use_cache == "sql"  # Default is now "sql"
         
     def test_client_creation_full(self, mock_env_api_key):
         """Test creating client with all parameters."""

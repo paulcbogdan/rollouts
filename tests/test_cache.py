@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import pytest
 
-from rollouts.cache import ResponseCache
+from rollouts.cache import ResponseCacheJson
 from rollouts import Response, Usage
 
 
@@ -16,12 +16,12 @@ class TestResponseCache:
     
     def test_cache_initialization(self, temp_cache_dir):
         """Test cache initialization with custom directory."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         assert cache.cache_dir == temp_cache_dir
         
     def test_cache_path_generation(self, temp_cache_dir):
         """Test cache path generation with various parameters."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         path = cache._get_cache_path(
             prompt="Test prompt",
@@ -40,7 +40,7 @@ class TestResponseCache:
         
     def test_cache_path_with_provider(self, temp_cache_dir):
         """Test cache path includes provider hash when specified."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         path_no_provider = cache._get_cache_path(
             prompt="Test",
@@ -68,7 +68,7 @@ class TestResponseCache:
         
     def test_cache_path_with_optional_params(self, temp_cache_dir):
         """Test cache path changes with optional parameters."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         path_default = cache._get_cache_path(
             prompt="Test",
@@ -114,7 +114,7 @@ class TestResponseCache:
         
     def test_cache_set_and_get(self, temp_cache_dir, sample_response):
         """Test setting and getting a cached response."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         # Cache the response
         success = cache.set(
@@ -149,7 +149,7 @@ class TestResponseCache:
         
     def test_cache_miss(self, temp_cache_dir):
         """Test cache miss returns None."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         cached = cache.get(
             prompt="Non-existent prompt",
@@ -165,7 +165,7 @@ class TestResponseCache:
         
     def test_cache_different_seeds(self, temp_cache_dir, sample_response):
         """Test that different seeds create different cache entries."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         # Cache with seed 1
         response1 = Response(full="Response 1")
@@ -219,7 +219,7 @@ class TestResponseCache:
         
     def test_cache_backward_compatibility(self, temp_cache_dir):
         """Test that cache can read old format with 'post' and 'full_text' fields."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         # Create cache file path
         cache_file = cache._get_cache_path(
@@ -275,7 +275,7 @@ class TestResponseCache:
         
     def test_get_cache_dir(self, temp_cache_dir):
         """Test get_cache_dir method."""
-        cache = ResponseCache(cache_dir=temp_cache_dir)
+        cache = ResponseCacheJson(cache_dir=temp_cache_dir)
         
         cache_dir = cache.get_cache_dir(
             prompt="Test prompt",
