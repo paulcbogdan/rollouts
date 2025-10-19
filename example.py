@@ -14,33 +14,6 @@ import time
 from rollouts import RolloutsClient
 
 
-def example_13_conversation():
-    client = RolloutsClient(
-        model="qwen/qwen3-30b-a3b",
-        temperature=0.7,
-        max_tokens=501,  # High enough number to finish reasoning
-        verbose=True,
-        provider={"ignore": ["SiliconFlow"]},
-    )
-
-    messages = []
-    messages.append({"role": "user", "content": "Pick a number from 1 to 100?"})
-    messages.append({"role": "assistant", "content": "I pick the number 42."})
-    messages.append(
-        {"role": "user", "content": "Say again, what number did you pick?"}
-    )
-
-    rollouts = client.generate(messages, n_samples=1)
-
-    print(f"Prompt: {messages}")
-    print(f"{rollouts[0]=}")
-    # print(f"Response: {rollouts[0].full=}")
-    # print(f"Reasoning: {rollouts[0].reasoning=}")
-    # print(f"Content: {rollouts[0].content=}")
-    # print(f"Tokens used: {rollouts[0].usage.total_tokens}")
-    quit()
-
-
 def example_0_reasoning_model():
     """Example 0: Basic usage with a reasoning model."""
     print("\n" + "=" * 50)
@@ -430,6 +403,28 @@ def example_12_reasoning_config():
         print(f"Note: This example requires a reasoning model. Error: {e}")
 
 
+def example_13_conversation():
+    client = RolloutsClient(
+        model="qwen/qwen3-30b-a3b",
+        temperature=0.7,
+        max_tokens=501,  # High enough number to finish reasoning
+        verbose=True,
+        provider={"ignore": ["SiliconFlow"]},
+    )
+
+    messages = []
+    messages.append({"role": "user", "content": "Pick a number from 1 to 100?"})
+    messages.append({"role": "assistant", "content": "I pick the number 42."})
+    messages.append(
+        {"role": "user", "content": "Say again, what number did you pick?"}
+    )
+
+    rollouts = client.generate(messages, n_samples=1)
+
+    print(f"Prompt: {messages}")
+    print(f"{rollouts[0]=}")
+
+
 def main():
     """Run all examples."""
     print("ROLLOUTS PACKAGE EXAMPLES")
@@ -448,7 +443,6 @@ def main():
         f"\n✓ API key found: {'*' * 20}{os.getenv('OPENROUTER_API_KEY')[-4:]}"
     )
 
-    example_13_conversation()
     example_0_reasoning_model()
     example_1_non_reasoning()
     example_2_multiple_samples()
@@ -462,6 +456,7 @@ def main():
     example_10_advanced_parameters()
     example_11_progress_bar()
     example_12_reasoning_config()
+    example_13_conversation()
 
     print("\n" + "=" * 50)
     print("✅ ALL EXAMPLES COMPLETED!")
