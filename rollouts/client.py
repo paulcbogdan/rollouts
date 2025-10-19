@@ -220,7 +220,7 @@ class RolloutsClient:
 
     async def agenerate(
         self,
-        prompt: str,
+        prompt: Union[str, List[dict]],
         n_samples: Optional[int] = None,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
@@ -473,7 +473,7 @@ class RolloutsClient:
 
     def generate(
         self,
-        prompt: str,
+        prompt: Union[str, List[dict]],
         n_samples: Optional[int] = None,
         progress_bar: Optional[bool] = None,
         **kwargs,

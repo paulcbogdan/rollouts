@@ -14,6 +14,33 @@ import time
 from rollouts import RolloutsClient
 
 
+def example_13_conversation():
+    client = RolloutsClient(
+        model="qwen/qwen3-30b-a3b",
+        temperature=0.7,
+        max_tokens=501,  # High enough number to finish reasoning
+        verbose=True,
+        provider={"ignore": ["SiliconFlow"]},
+    )
+
+    messages = []
+    messages.append({"role": "user", "content": "Pick a number from 1 to 100?"})
+    messages.append({"role": "assistant", "content": "I pick the number 42."})
+    messages.append(
+        {"role": "user", "content": "Say again, what number did you pick?"}
+    )
+
+    rollouts = client.generate(messages, n_samples=1)
+
+    print(f"Prompt: {messages}")
+    print(f"{rollouts[0]=}")
+    # print(f"Response: {rollouts[0].full=}")
+    # print(f"Reasoning: {rollouts[0].reasoning=}")
+    # print(f"Content: {rollouts[0].content=}")
+    # print(f"Tokens used: {rollouts[0].usage.total_tokens}")
+    quit()
+
+
 def example_0_reasoning_model():
     """Example 0: Basic usage with a reasoning model."""
     print("\n" + "=" * 50)
@@ -22,7 +49,9 @@ def example_0_reasoning_model():
 
     # Create a client for a basic model
     client = RolloutsClient(
-        model="qwen/qwen3-30b-a3b", temperature=0.7, max_tokens=200  # A good, fast reasoning model
+        model="qwen/qwen3-30b-a3b",
+        temperature=0.7,
+        max_tokens=200,  # A good, fast reasoning model
     )
 
     # Generate a single response
@@ -44,7 +73,9 @@ def example_1_non_reasoning():
 
     # Create a client for a basic model
     client = RolloutsClient(
-        model="qwen/qwen-2.5-7b-instruct", temperature=0.7, max_tokens=200  # A good, fast model
+        model="qwen/qwen-2.5-7b-instruct",
+        temperature=0.7,
+        max_tokens=200,  # A good, fast model
     )
 
     # Generate a single response
@@ -88,7 +119,9 @@ def example_3_think_injection():
 
     # Use a reasoning model that supports think injection
     client = RolloutsClient(
-        model="qwen/qwen3-30b-a3b", temperature=0.7, max_tokens=300  # Reasoning model
+        model="qwen/qwen3-30b-a3b",
+        temperature=0.7,
+        max_tokens=300,  # Reasoning model
     )
 
     # Inject partial thinking to guide the model
@@ -99,7 +132,9 @@ def example_3_think_injection():
 
     print(f"Prompt: {prompt}")
     print(f"\nFull Response: {response.full=}")
-    print(f'\nReasoning Only (should continue "I need to multiply 127..."): {response.reasoning=}')
+    print(
+        f'\nReasoning Only (should continue "I need to multiply 127..."): {response.reasoning=}'
+    )
     print(f"\nContent Only: {response.content=}")
 
 
@@ -141,7 +176,9 @@ async def example_5_async_usage():
     print("EXAMPLE 5: Async Usage")
     print("=" * 50)
 
-    client = RolloutsClient(model="qwen/qwen-2.5-7b-instruct", temperature=0.8, max_tokens=150)
+    client = RolloutsClient(
+        model="qwen/qwen-2.5-7b-instruct", temperature=0.8, max_tokens=150
+    )
 
     # Generate responses for multiple prompts concurrently
     prompts = [
@@ -151,7 +188,9 @@ async def example_5_async_usage():
     ]
 
     # Run all generations concurrently
-    results = await asyncio.gather(*[client.agenerate(prompt, n_samples=1) for prompt in prompts])
+    results = await asyncio.gather(
+        *[client.agenerate(prompt, n_samples=1) for prompt in prompts]
+    )
 
     print("Generated responses for 3 prompts concurrently:")
     for i, (prompt, rollouts) in enumerate(zip(prompts, results), 1):
@@ -206,7 +245,9 @@ def example_7_caching():
     t_start = time.time()
     rollouts1 = client.generate(prompt, n_samples=1, seed=42)
     t_end = time.time()
-    print(f"Time taken (should take a while if not cached): {t_end - t_start:.5f} seconds")
+    print(
+        f"Time taken (should take a while if not cached): {t_end - t_start:.5f} seconds"
+    )
 
     t_start = time.time()
     print("\nSecond call (should use cache):")
@@ -228,7 +269,11 @@ def example_8_provider_routing():
     client = RolloutsClient(
         model="meta-llama/llama-3.1-8b-instruct",  # Available from multiple providers
         provider={
-            "order": ["groq", "together", "deepinfra"],  # Prefer these providers in order
+            "order": [
+                "groq",
+                "together",
+                "deepinfra",
+            ],  # Prefer these providers in order
             # You can also exclude providers:
             # "ignore": ["openai", "anthropic"]
         },
@@ -240,7 +285,9 @@ def example_8_provider_routing():
     rollouts = client.generate(prompt, n_samples=1)
 
     print(f"Prompt: {prompt}")
-    print(f"Response from provider '{rollouts[0].provider}': {rollouts[0].full=}")
+    print(
+        f"Response from provider '{rollouts[0].provider}': {rollouts[0].full=}"
+    )
     print("\nNote: Provider routing allows you to:")
     print("- Prefer specific providers with 'order'")
     print("- Exclude providers with 'ignore'")
@@ -296,7 +343,9 @@ def example_10_advanced_parameters():
         top_a=0.8,  # Top-a sampling
     )
 
-    prompt = "Write a short story about a robot. Be creative and avoid repetition."
+    prompt = (
+        "Write a short story about a robot. Be creative and avoid repetition."
+    )
     rollouts = client.generate(prompt, n_samples=1)
 
     print(f"Prompt: {prompt}")
@@ -325,7 +374,9 @@ def example_11_progress_bar():
     print("(Progress bar appears for n_samples > 1)")
 
     # This will show a progress bar
-    rollouts = client.generate("Write a one-line joke", n_samples=5)  # Progress bar will appear
+    rollouts = client.generate(
+        "Write a one-line joke", n_samples=5
+    )  # Progress bar will appear
 
     print(f"\nGenerated {len(rollouts)} responses")
     for i, response in enumerate(rollouts, 1):
@@ -361,7 +412,9 @@ def example_12_reasoning_config():
         include_reasoning=True,  # Explicitly include reasoning in response
     )
 
-    prompt = "Solve: If a train travels 60 mph for 2.5 hours, how far does it go?"
+    prompt = (
+        "Solve: If a train travels 60 mph for 2.5 hours, how far does it go?"
+    )
 
     try:
         rollouts = client.generate(prompt, n_samples=1)
@@ -380,7 +433,9 @@ def example_12_reasoning_config():
 def main():
     """Run all examples."""
     print("ROLLOUTS PACKAGE EXAMPLES")
-    print("Learn how to use the rollouts package for generating multiple LLM responses")
+    print(
+        "Learn how to use the rollouts package for generating multiple LLM responses"
+    )
 
     # Check for API key
     if not os.getenv("OPENROUTER_API_KEY"):
@@ -389,8 +444,11 @@ def main():
         print("   export OPENROUTER_API_KEY='your-key-here'")
         return
 
-    print(f"\n✓ API key found: {'*' * 20}{os.getenv('OPENROUTER_API_KEY')[-4:]}")
+    print(
+        f"\n✓ API key found: {'*' * 20}{os.getenv('OPENROUTER_API_KEY')[-4:]}"
+    )
 
+    example_13_conversation()
     example_0_reasoning_model()
     example_1_non_reasoning()
     example_2_multiple_samples()

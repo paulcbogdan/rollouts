@@ -17,7 +17,7 @@ Key functionality:
 """
 
 import warnings
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Union
 
 from .types import Message
 
@@ -72,7 +72,9 @@ def detect_model_type(model: str) -> str:
     return "think"
 
 
-def format_messages_with_thinking(prompt: str, model: str, verbose: bool = False) -> List[Message]:
+def format_messages_with_thinking(
+    prompt: Union[str, List[dict]], model: str, verbose: bool = False
+) -> List[Message]:
     """
     Format messages with thinking tokens based on model type.
 
@@ -89,6 +91,11 @@ def format_messages_with_thinking(prompt: str, model: str, verbose: bool = False
     if verbose:
         print(f"Model type detected: {model_type} for model: {model}")
 
+    if isinstance(prompt, list):
+        if verbose:
+            print(f"Prompt is a list of messages")
+        return prompt
+
     # Check if prompt contains any thinking tokens
     has_think = "<think>" in prompt
     has_analysis = "<|channel|>analysis" in prompt
@@ -97,8 +104,12 @@ def format_messages_with_thinking(prompt: str, model: str, verbose: bool = False
         # GPT-OSS on OpenRouter doesn't support message prefilling
         # The reasoning is handled separately by OpenRouter
         if verbose and (has_think or has_analysis):
-            print(f"Warning: GPT-OSS models on OpenRouter don't support thinking injection")
-            print(f"         Reasoning is handled internally and returned in a separate field")
+            print(
+                f"Warning: GPT-OSS models on OpenRouter don't support thinking injection"
+            )
+            print(
+                f"         Reasoning is handled internally and returned in a separate field"
+            )
         return [{"role": "user", "content": prompt}]
     elif model_type == "think":
         return format_think_messages(prompt, has_think, verbose)
@@ -115,7 +126,9 @@ def format_messages_with_thinking(prompt: str, model: str, verbose: bool = False
         return [{"role": "user", "content": prompt}]
 
 
-def format_think_messages(prompt: str, has_think: bool, verbose: bool = False) -> List[Message]:
+def format_think_messages(
+    prompt: str, has_think: bool, verbose: bool = False
+) -> List[Message]:
     """
     Format messages for models that use <think> tags.
 
@@ -141,7 +154,9 @@ def format_think_messages(prompt: str, has_think: bool, verbose: bool = False) -
 
     # Split on <think> to separate user part from thinking part
     if prompt.count("<think>") > 1:
-        warnings.warn("Multiple <think> tags detected.", UserWarning, stacklevel=2)
+        warnings.warn(
+            "Multiple <think> tags detected.", UserWarning, stacklevel=2
+        )
 
     parts = prompt.split("<think>", 1)
 
@@ -200,7 +215,10 @@ def create_test_prompts(model: str) -> List[Tuple[str, str]]:
                 "Test 2: GPT-OSS doesn't support thinking injection",
                 "What is 10*5? (Note: thinking injection not supported)",
             ),
-            ("Test 3: Reasoning handled internally by OpenRouter", "Calculate 15/3"),
+            (
+                "Test 3: Reasoning handled internally by OpenRouter",
+                "Calculate 15/3",
+            ),
         ]
     elif model_type == "think":
         return [
