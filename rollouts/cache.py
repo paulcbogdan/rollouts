@@ -87,7 +87,14 @@ class ResponseCacheJson:
         )
 
         # Hash prompt only
-        prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:32]
+        if isinstance(prompt, str):
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        elif isinstance(prompt, list):
+            prompt_hash = hashlib.sha256(
+                json.dumps(prompt).encode("utf-8")
+            ).hexdigest()
+        else:
+            raise ValueError(f"Invalid prompt type: {type(prompt)}")
 
         # Build parameter string
         param_str = f"t{temperature}_p{top_p}_tok{max_tokens}"
