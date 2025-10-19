@@ -52,7 +52,7 @@ class RolloutsClient:
         max_retries: int = 100,
         timeout: int = 300,
         verbose: bool = False,
-        use_cache: Union[bool, str] = "sql",
+        use_cache: Union[bool, str] = "json",
         cache_dir: str = ".rollouts",
         requests_per_minute: Optional[int] = None,
         progress_bar: bool = True,
