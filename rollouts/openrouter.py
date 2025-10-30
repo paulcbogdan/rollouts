@@ -69,10 +69,13 @@ class OpenRouter:
         # Use provided API key, fallback to instance key, then error if none
         key = api_key or self.api_key
         if not key:
-            return self._error_response(
+            raise ValueError(
                 "No API key provided. Pass api_key parameter or set OPENROUTER_API_KEY",
-                config["model"],
             )
+            # return self._error_response(
+            #     "No API key provided. Pass api_key parameter or set OPENROUTER_API_KEY",
+            #     config["model"],
+            # )
 
         headers = {
             "Authorization": f"Bearer {key}",
@@ -84,7 +87,9 @@ class OpenRouter:
         # Format messages with model-specific thinking support
         from .think_handler import format_messages_with_thinking, debug_messages
 
-        messages = format_messages_with_thinking(prompt, config["model"], config["verbose"])
+        messages = format_messages_with_thinking(
+            prompt, config["model"], config["verbose"]
+        )
 
         # Show formatted messages if verbose
         if config["verbose"]:
@@ -99,7 +104,11 @@ class OpenRouter:
             "cache_dir",
             "requests_per_minute",
         ]
-        payload = {k: v for k, v in config.items() if k not in client_only and v is not None}
+        payload = {
+            k: v
+            for k, v in config.items()
+            if k not in client_only and v is not None
+        }
 
         # Add messages (required)
         payload["messages"] = messages
@@ -116,28 +125,35 @@ class OpenRouter:
                 if rate_limiter:
                     await rate_limiter.acquire()
 
-                async with httpx.AsyncClient(timeout=config["timeout"]) as client:
-                    response = await client.post(self.api_url, headers=headers, json=payload)
+                async with httpx.AsyncClient(
+                    timeout=config["timeout"]
+                ) as client:
+                    response = await client.post(
+                        self.api_url, headers=headers, json=payload
+                    )
 
                     if response.status_code in [500, 429]:
-                        if config["verbose"]:
-                            error_type = (
-                                "Server error" if response.status_code == 500 else "Rate limit"
-                            )
-                            print(f"{error_type} on attempt {attempt+1}/{config['max_retries']}")
+                        error_type = (
+                            "Server error"
+                            if response.status_code == 500
+                            else "Rate limit"
+                        )
+                        print(
+                            f"{error_type} on attempt {attempt+1}/{config['max_retries']}"
+                        )
 
                         delay = min(retry_delay * (2**attempt), 60)
                         await asyncio.sleep(delay)
                         continue
 
                     elif response.status_code != 200:
-                        if config["verbose"]:
-                            print(
-                                f"API error ({response.status_code}) on attempt {attempt+1}/{config['max_retries']}. Returned json:\n{response.json()}"
-                            )
+                        print(
+                            f"API error ({response.status_code}) on attempt {attempt+1}/{config['max_retries']}. Returned json:\n{response.json()}"
+                        )
                         if attempt == config["max_retries"] - 1:
                             return self._error_response(
-                                f"API error: {response.status_code}", config["model"]
+                                f"API error: {response.status_code}",
+                                config["model"],
                             )
                         delay = min(retry_delay * (2**attempt), 60)
                         await asyncio.sleep(delay)
@@ -146,18 +162,24 @@ class OpenRouter:
                     try:
                         result = response.json()
                     except json.decoder.JSONDecodeError:
-                        if config["verbose"]:
-                            print(f"JSON decode error on attempt {attempt+1}/{config['max_retries']}. Returned response:\n{response}")
+                        print(
+                            f"JSON decode error on attempt {attempt+1}/{config['max_retries']}. Returned response:\n{response}"
+                        )
                         if attempt == config["max_retries"] - 1:
                             return self._error_response(
-                                f"JSON decode error: {response.status_code}", config["model"]
+                                f"JSON decode error: {response.status_code}",
+                                config["model"],
                             )
                         delay = min(retry_delay * (2**attempt), 60)
                         continue
 
                     return self._parse_response(result, config["model"], seed)
 
-            except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            except (
+                httpx.RequestError,
+                httpx.TimeoutException,
+                httpx.HTTPStatusError,
+            ) as e:
                 if config["verbose"]:
                     print(f"Request error on attempt {attempt+1}: {e}")
 
@@ -169,7 +191,9 @@ class OpenRouter:
 
         return self._error_response("Max retries exceeded", config["model"])
 
-    def _parse_response(self, result: Dict[str, Any], model: str, seed: Optional[int]) -> Response:
+    def _parse_response(
+        self, result: Dict[str, Any], model: str, seed: Optional[int]
+    ) -> Response:
         """Parse API response into Response object.
 
         Args:
