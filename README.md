@@ -89,6 +89,7 @@ Importantly, you should avoid ending inserted thoughts with a trailing space (`"
 Inserting thoughts does not work for:
 - Models where true thinking tokens are hidden (Gemini and OpenAI)
 - GPT-OSS-20b/120b, which use a different reasoning template; I tried to get the GPT-OSS template working, but I'm not sure it's possible with OpenRouter
+- Various provider-model pairs. For example, for qwen3-32b, thinking insertion fails for groq but works on cerebras, deepinfra, friendli, nebius, novita, sambanova, siliconflow. See `prefill_provider_sweep.py` to find which providers work for your desired model and see how to filter for only those using `provider={"only": [...]}`
 
 ## Parameter Override
 
